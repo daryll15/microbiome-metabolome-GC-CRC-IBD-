@@ -1,0 +1,520 @@
+---
+title: "IBD Preprocessing"
+author: "Daryll Susan Philip"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/DaryllPhilip/Desktop/THESIS /IBD")
+```
+
+```{r}
+getwd()
+```
+
+#Load required packages
+```{r}
+library(tidyverse)
+library(dplyr)
+library(vegan)
+library(tidyr)
+library(naniar)
+library(ape)
+library(ggplot2)
+library(FactoMineR)
+library(factoextra)
+library(stats)
+library(openxlsx)
+```
+
+
+#Load the datasets
+```{r}
+#IBD microbes
+gene_ibd = read.csv("genera_IBD.tsv", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+head(gene_ibd)
+
+#IBD metabolites
+mtb_ibd = read.xlsx("mtb.xlsx")
+mtb_ibd
+
+```
+
+
+#Microbiome IBD
+
+
+```{r}
+# Count the number of patients in each group
+patient_counts <- gene_ibd %>%
+  group_by(Study.Group) %>%
+  summarise(Count = n())
+
+print(patient_counts)
+ibd_count <- sum(gene_ibd$Study.Group == "IBD")
+healthy_count <- sum(gene_ibd$Study.Group == "Healthy")
+
+
+cat("Number of IBD patients:", ibd_count, "\n")
+cat("Number of Healthy patients:", healthy_count, "\n")
+
+```
+
+
+
+#Check for missing values
+```{r}
+
+missing_summary <- gene_ibd %>%
+  summarise_all(~ sum(is.na(.))) %>%
+  gather(key = "Column", value = "MissingValues") %>%
+  mutate(MissingPercentage = (MissingValues / nrow(gene_ibd)) * 100)
+missing_summary <- naniar::miss_var_summary(gene_ibd)
+
+print(missing_summary)
+naniar::gg_miss_var(gene_ibd)
+
+#there were no missing values
+```
+
+
+#Identifying sparse features
+
+```{r}
+
+sparsity <- colSums(gene_ibd == 0) / nrow(gene_ibd) * 100
+bins <- cut(sparsity, breaks = seq(0, 110, by = 10), include.lowest = TRUE, right = FALSE, labels = FALSE)
+sparsity_counts <- table(bins)
+bin_labels <- c("0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%")
+total_features <- length(sparsity)
+surviving_features <- sum(bins == 1)  # bins == 1 corresponds to the "0%" bin
+
+# Print the table
+print("Sparsity (%) | Number of Features")
+for (i in seq_along(bin_labels)) {
+  count <- ifelse(i %in% names(sparsity_counts), sparsity_counts[as.character(i)], 0)
+  cat(bin_labels[i], "|", count, "\n")
+}
+
+cat("\nTotal number of microbiome features:", total_features, "\n")
+cat("Number of surviving microbiome features (non-sparse):", surviving_features, "\n")
+```
+
+#Remove the sparse microbiome features
+
+```{r}
+sparsity <- colSums(gene_ibd == 0) / nrow(gene_ibd) * 100
+gene_new <- gene_ibd[, sparsity <= 40]
+sparsity_filtered <- colSums(gene_new == 0) / nrow(gene_new) * 100
+bins_filtered <- cut(sparsity_filtered, breaks = seq(0, 110, by = 10), include.lowest = TRUE, right = FALSE, labels = FALSE)
+sparsity_counts_filtered <- table(bins_filtered)
+bin_labels <- c("0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%")
+
+total_features_filtered <- length(sparsity_filtered)
+surviving_features_filtered <- sum(bins_filtered == 1)
+print("Sparsity (%) | Number of Features")
+for (i in seq_along(bin_labels)) {
+  count <- ifelse(i %in% names(sparsity_counts_filtered), sparsity_counts_filtered[as.character(i)], 0)
+  cat(bin_labels[i], "|", count, "\n")
+}
+
+cat("\nTotal number of microbiome features after filtering:", total_features_filtered, "\n")
+gene_new
+```
+
+#min-max scale the features
+
+```{r}
+min_max_scaling <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+gene_new <- gene_new %>%
+  mutate(across(where(is.numeric), min_max_scaling))
+gene_new
+```
+
+
+#PCoA to visualise the outliers (microbiome)
+
+```{r}
+
+gene_new <- gene_new[, !(names(gene_new) %in% c("Study.Group"))]
+bray_curtis_dist <- vegdist(gene_new, method = "bray")
+pcoa_results <- pcoa(bray_curtis_dist)
+coordinates <- pcoa_results$vectors[, 1:2]
+colnames(coordinates) <- c("Axis.1", "Axis.2")
+pcoa_df <- as.data.frame(coordinates)
+pcoa_df$Study.Group <- gene_new$Study.Group  
+pcoa_df$Study.Group <- as.factor(pcoa_df$Study.Group)
+
+
+pcoa_df <- pcoa_df %>%
+  mutate(OutlierStatus = ifelse(Outlier, "Outlier", "Non-Outlier"))
+print(table(pcoa_df$OutlierStatus))
+
+#Plot PCoA with outliers highlighted
+ggplot(pcoa_df, aes(x = Axis.1, y = Axis.2, color = Study.Group)) +
+  geom_point(aes(shape = OutlierStatus), size = 3) +  # Shape based on outlier status
+  stat_ellipse(aes(group = Study.Group, color = Study.Group), type = "t", level = 0.95) +
+  scale_color_manual(values = c("IBD" = "#D95F02", "Healthy" = "#1B9E77")) +
+  labs(title = "PCoA For Genera (Bray-Curtis) with Outliers",
+       x = paste("PCoA1 (", round(100 * pcoa_results$values$Relative_eig[1], 2), "%)", sep = ""),
+       y = paste("PCoA2 (", round(100 * pcoa_results$values$Relative_eig[2], 2), "%)", sep = ""),
+       color = "Group", shape = "Outlier Status") +
+  theme_minimal()
+
+```
+
+#Remove the outliers and replot the graph 
+```{r}
+
+non_outlier_indices <- which(pcoa_df$OutlierStatus == "Non-Outlier")
+cleaned_gene <- gene_new[non_outlier_indices, ]
+gen_cleaned <- cleaned_gene[, !(names(cleaned_gene) %in% c("Study.Group"))]
+bray_curtis_dist_cleaned <- vegdist(gen_cleaned, method = "bray")
+
+# Perform PCoA on the cleaned Bray-Curtis dissimilarity matrix
+pcoa_results_cleaned <- pcoa(bray_curtis_dist_cleaned)
+coordinates_cleaned <- pcoa_results_cleaned$vectors[, 1:2]
+colnames(coordinates_cleaned) <- c("Axis.1", "Axis.2")
+pcoa_df_cleaned <- as.data.frame(coordinates_cleaned)
+pcoa_df_cleaned$Study.Group <- cleaned_gene$Study.Group  # Ensure this column exists in 'cleaned_gene'
+pcoa_df_cleaned$Study.Group <- as.factor(pcoa_df_cleaned$Study.Group)
+
+#Plot PCoA for cleaned dataset with outliers removed
+ggplot(pcoa_df_cleaned, aes(x = Axis.1, y = Axis.2, color = Study.Group)) +
+  geom_point(size = 3) +  
+  stat_ellipse(aes(group = Study.Group, color = Study.Group), type = "t", level = 0.95) +
+  scale_color_manual(values = c("IBD" = "#D95F02", "Healthy" = "#1B9E77")) +
+  labs(title = "PCoA For IBD Genera (Bray-Curtis)",
+       x = paste("PCoA1 (", round(100 * pcoa_results_cleaned$values$Relative_eig[1], 2), "%)", sep = ""),
+       y = paste("PCoA2 (", round(100 * pcoa_results_cleaned$values$Relative_eig[2], 2), "%)", sep = ""),
+       color = "Group") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14), 
+    legend.title = element_text(size = 12)  
+  )
+
+```
+
+#Check for number of ibd and healthy patients for microbiome dataset
+```{r}
+gene_pcoa = cleaned_gene
+patient_counts <- gene_pcoa %>%
+  group_by(Study.Group) %>%
+  summarise(Count = n())
+print(patient_counts)
+
+
+ibd_count <- sum(gene_pcoa$Study.Group == "IBD")
+healthy_count <- sum(gene_pcoa$Study.Group == "Healthy")
+
+cat("Number of IBD patients:", ibd_count, "\n")
+cat("Number of Healthy patients:", healthy_count, "\n")
+
+# 211 Samples from the microbiome dataset were considered for final analysis from the previous 220
+```
+
+#Mann Whitney U test/ Wilcoxon Sum Rank Test For Genera/Microbiome
+
+```{r}
+
+long_data <- gene_pcoa %>%
+  pivot_longer(cols = -c(Study.Group), names_to = "Compound", values_to = "Value")
+p_values <- list()
+compounds <- unique(long_data$Compound)
+p_values_vec <- unlist(p_values)
+
+# Apply FDR correction using Benjamini-Hochberg procedure
+p_adjusted <- p.adjust(p_values_vec, method = "fdr")
+
+# Create a result data frame
+results <- data.frame(
+  Compound = names(p_values),
+  Original_P_Value = p_values_vec,
+  FDR_Corrected_P_Value = p_adjusted,
+  Reject_Null = p_adjusted < 0.05
+)
+
+print(results)
+count_reject_null <- table(results$Reject_Null)
+print(count_reject_null)
+
+
+num_rejected <- count_reject_null['TRUE']
+num_accepted <- count_reject_null['FALSE']
+
+cat("Number of null hypotheses rejected (significant features):", num_rejected, "\n")
+cat("Number of null hypotheses accepted (non-significant features):", num_accepted, "\n")
+
+```
+
+#Remove insignificant features
+```{r}
+
+significant_results <- results %>% filter(Reject_Null == TRUE)
+print(significant_results)
+gene_filtered <- gene_pcoa %>%
+  select(Study.Group,  all_of(significant_results$Compound))
+
+
+print(gene_filtered)
+dim(gene_filtered)
+
+#the whole process left us with 1089 microbes for machine learning analysis
+```
+
+
+#Metabolites(IBD)
+
+
+```{r}
+mtb_ibd <- mtb_ibd[, !grepl(":.NA$", colnames(mtb_ibd))]
+mtb_ibd
+```
+
+
+
+```{r}
+# Count the number of patients in each group
+patient_counts <- mtb_ibd %>%
+  group_by(Study.Group) %>%
+  summarise(Count = n())
+
+print(patient_counts)
+ibd_count <- sum(mtb_ibd$Study.Group == "IBD")
+healthy_count <- sum(mtb_ibd$Study.Group == "Healthy")
+
+
+cat("Number of IBD patients:", ibd_count, "\n")
+cat("Number of Healthy patients:", healthy_count, "\n")
+
+```
+
+
+
+#Check for missing values
+```{r}
+
+missing_summary <- mtb_ibd %>%
+  summarise_all(~ sum(is.na(.))) %>%
+  gather(key = "Column", value = "MissingValues") %>%
+  mutate(MissingPercentage = (MissingValues / nrow(mtb_ibd)) * 100)
+missing_summary <- naniar::miss_var_summary(mtb_ibd)
+
+print(missing_summary)
+naniar::gg_miss_var(mtb_ibd)
+
+#there were no missing values
+```
+
+
+#Identifying sparse features
+```{r}
+
+sparsity <- colSums(mtb_ibd == 0) / nrow(mtb_ibd) * 100
+bins <- cut(sparsity, breaks = seq(0, 110, by = 10), include.lowest = TRUE, right = FALSE, labels = FALSE)
+sparsity_counts <- table(bins)
+bin_labels <- c("0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%")
+total_features <- length(sparsity)
+surviving_features <- sum(bins == 1)  # bins == 1 corresponds to the "0%" bin
+
+# Print the table
+print("Sparsity (%) | Number of Features")
+for (i in seq_along(bin_labels)) {
+  count <- ifelse(i %in% names(sparsity_counts), sparsity_counts[as.character(i)], 0)
+  cat(bin_labels[i], "|", count, "\n")
+}
+
+cat("\nTotal number of metabolome features:", total_features, "\n")
+cat("Number of surviving metabolome features (non-sparse):", surviving_features, "\n")
+```
+
+#Remove the sparse metabolome features
+```{r}
+sparsity <- colSums(mtb_ibd == 0) / nrow(mtb_ibd) * 100
+mtb_new <- mtb_ibd[, sparsity <= 80]
+sparsity_filtered <- colSums(mtb_new == 0) / nrow(mtb_new) * 100
+bins_filtered <- cut(sparsity_filtered, breaks = seq(0, 110, by = 10), include.lowest = TRUE, right = FALSE, labels = FALSE)
+sparsity_counts_filtered <- table(bins_filtered)
+bin_labels <- c("0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%")
+
+total_features_filtered <- length(sparsity_filtered)
+surviving_features_filtered <- sum(bins_filtered == 1)
+print("Sparsity (%) | Number of Features")
+for (i in seq_along(bin_labels)) {
+  count <- ifelse(i %in% names(sparsity_counts_filtered), sparsity_counts_filtered[as.character(i)], 0)
+  cat(bin_labels[i], "|", count, "\n")
+}
+
+cat("\nTotal number of metabolome features after filtering:", total_features_filtered, "\n")
+mtb_new
+```
+
+#Min-max scale the features
+```{r}
+min_max_scaling <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+mtb_new <- mtb_new %>%
+  mutate(across(where(is.numeric), min_max_scaling))
+mtb_new
+```
+
+
+#PCA for metabolites
+
+```{r}
+
+
+mtbs <- mtb_new[, !(names(mtb_new) %in% c("Study.Group"))]
+
+
+mtbs <- mtbs[, apply(mtbs, 2, function(col) sd(col) != 0)]
+pca_result_mtb <- prcomp(mtbs, scale. = TRUE)
+fviz_eig(pca_result_mtb, addlabels = TRUE, ylim = c(0, 70))
+explained_variance <- summary(pca_result_mtb)$importance[2, ]
+pca_df <- as.data.frame(pca_result_mtb$x)
+
+
+
+#Calculate Mahalanobis distance
+mean_pca <- colMeans(pca_df[, 1:2])
+cov_pca <- cov(pca_df[, 1:2])
+mahalanobis_dist <- apply(pca_df[, 1:2], 1, function(x) mahalanobis(x, mean_pca, cov_pca))
+cutoff <- qchisq(0.95, df = 2)
+pca_df$Outlier <- mahalanobis_dist > cutoff
+
+
+pca_df <- pca_df %>%
+  mutate(OutlierStatus = ifelse(Outlier, "Outlier", "Non-Outlier"))
+
+#Plot PCA 
+ggplot(pca_df, aes(x = PC1, y = PC2, color = Study.Group, shape = OutlierStatus)) +
+  geom_point(size = 3) +
+  scale_shape_manual(values = c("Non-Outlier" = 16, "Outlier" = 4)) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(title = "PCA For Metabolites",
+       x = paste("PC1 (", round(100 * explained_variance[1], 2), "%)", sep = ""),
+       y = paste("PC2 (", round(100 * explained_variance[2], 2), "%)", sep = ""),
+       color = "Study.Group",
+       shape = "Outlier Status") +
+  theme_minimal()
+
+table(pca_df$OutlierStatus)
+
+```
+
+#Remove outliers and replot the graph
+
+```{r}
+
+pca_df_cleaned <- pca_df %>%
+  filter(OutlierStatus == "Non-Outlier")
+
+mtb_ibd <- mtb_new %>%
+  filter(row.names(mtb_new) %in% row.names(pca_df_cleaned))
+
+#Plot PCA with outliers removed
+ggplot(pca_df_cleaned, aes(x = PC1, y = PC2, color = Study.Group)) +
+  geom_point(size = 3) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(title = "PCA For IBD Metabolites ",
+       x = paste("PC1 (", round(100 * explained_variance[1], 2), "%)", sep = ""),
+       y = paste("PC2 (", round(100 * explained_variance[2], 2), "%)", sep = ""),
+       color = "Group") +
+  theme_minimal() +
+theme(
+    plot.title = element_text(size = 16),  
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    legend.title = element_text(size = 12)  
+  )
+```
+
+#Check for number of IBD and Healthy patients for metabolome dataset
+```{r}
+mtb_pcoa = mtb_ibd
+patient_counts <- mtb_pcoa %>%
+  group_by(Study.Group) %>%
+  summarise(Count = n())
+print(patient_counts)
+
+
+ibd_count <- sum(mtb_pcoa$Study.Group == "IBD")
+healthy_count <- sum(mtb_pcoa$Study.Group == "Healthy")
+
+cat("Number of IBD patients:", ibd_count, "\n")
+cat("Number of Healthy patients:", healthy_count, "\n")
+
+# 213 samples from the metabolome dataset were considered for final analysis from the previous 220
+```
+
+
+
+
+#Mann Whitney U test/ Wilcoxon Sum Rank Test For Metabolome 
+
+```{r}
+
+long_data <- mtb_pcoa %>%
+  pivot_longer(cols = -c(Study.Group), names_to = "Compound", values_to = "Value")
+p_values <- list()
+compounds <- unique(long_data$Compound)
+p_values_vec <- unlist(p_values)
+
+# Apply FDR correction using Benjamini-Hochberg procedure
+p_adjusted <- p.adjust(p_values_vec, method = "fdr")
+
+# Create a result data frame
+results <- data.frame(
+  Compound = names(p_values),
+  Original_P_Value = p_values_vec,
+  FDR_Corrected_P_Value = p_adjusted,
+  Reject_Null = p_adjusted < 0.05
+)
+
+print(results)
+count_reject_null <- table(results$Reject_Null)
+print(count_reject_null)
+
+
+num_rejected <- count_reject_null['TRUE']
+num_accepted <- count_reject_null['FALSE']
+
+cat("Number of null hypotheses rejected (significant features):", num_rejected, "\n")
+cat("Number of null hypotheses accepted (non-significant features):", num_accepted, "\n")
+
+```
+
+#Remove insignificant features
+```{r}
+
+significant_results <- results %>% filter(Reject_Null == TRUE)
+print(significant_results)
+mtb_filtered <- mtb_pcoa %>%
+  select(Study.Group,  all_of(significant_results$Compound))
+
+
+print(mtb_filtered)
+dim(mtb_filtered)
+
+#the whole process left us with 259 metabolites for machine learning analysis
+```
+
+
+
+#Save the datasets
+```{r}
+#microbiome
+write.csv(gene_filtered, "genera_processed_IBD.tsv", row.names = FALSE, col.names = TRUE)
+#metabolome
+write.csv(mtb_filtered, "mtb_processed_IBD.tsv",row.names = FALSE, col.names = TRUE)
+```

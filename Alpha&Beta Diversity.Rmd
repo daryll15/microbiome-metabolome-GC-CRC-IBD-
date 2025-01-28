@@ -1,0 +1,765 @@
+---
+title: "Alpha&Beta Diversity"
+author: "Daryll Susan Philip"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#Load required packages
+```{r}
+library(readxl)
+library(BiocManager)
+library(phyloseq)
+library(ggplot2)
+library(dplyr)
+library(vegan)
+```
+
+#Alpha Diversity for GC microbes
+
+```{r}
+gc_al = read_excel("Gastric Cancer Microbes.xlsx")
+gc_al
+```
+
+```{r}
+alpha_diversity_measures <- function(data, group_col = "Group") {
+  if (!group_col %in% colnames(data)) {
+    stop("The specified group column does not exist in the data.")
+  }
+
+  data[[group_col]] <- as.factor(data[[group_col]])
+  data_no_group <- data[, !(names(data) %in% group_col)]
+  data_no_group[] <- lapply(data_no_group, as.numeric)
+
+
+  if (any(is.na(data_no_group))) {
+    stop("The data contains NA values. Please handle them before calculating diversity.")
+  }
+
+
+  if (any(data_no_group < 0)) {
+    stop("All abundance values must be non-negative.")
+  }
+
+  # Calculate alpha diversity indices
+  shannon_diversity <- vegan::diversity(data_no_group, index = "shannon")
+  gini_simpson_diversity <- 1 - vegan::diversity(data_no_group, index = "simpson")
+
+  # Create a data frame to store diversity measures
+  diversity_measures <- data.frame(
+    SampleID = rownames(data),
+    Group = data[[group_col]],
+    Shannon = shannon_diversity,
+    GiniSimpson = gini_simpson_diversity
+  )
+
+  groups <- levels(data[[group_col]])
+  group_pairs <- combn(groups, 2, simplify = FALSE)
+
+  list(
+    diversity_measures = diversity_measures,
+    group_pairs = group_pairs
+  )
+}
+
+results <- alpha_diversity_measures(gc_al, group_col = "Group")
+diversity_measures <- results$diversity_measures
+group_pairs <- results$group_pairs
+
+print(diversity_measures)
+print(group_pairs)
+
+```
+
+#Shannon-Diversity Index for GC
+
+```{r}
+
+# Function to compute Mann-Whitney U test p-values with FDR correction
+compute_mann_whitney_pvalues <- function(data, measure, group_col) {
+  unique_groups <- unique(data[[group_col]])
+  group_comparisons <- combn(unique_groups, 2, simplify = FALSE)
+  pvalues <- numeric(length(group_comparisons))
+  names(pvalues) <- sapply(group_comparisons, function(x) paste(x, collapse = " vs "))
+  
+  for (i in seq_along(group_comparisons)) {
+    comparison <- group_comparisons[[i]]
+    group1_data <- data[data[[group_col]] == comparison[1], measure, drop = TRUE]
+    group2_data <- data[data[[group_col]] == comparison[2], measure, drop = TRUE]
+    test_result <- wilcox.test(group1_data, group2_data, exact = FALSE)
+    pvalues[i] <- test_result$p.value
+  }
+  
+  pvalues <- p.adjust(pvalues, method = "fdr")
+  
+  return(pvalues)
+}
+
+
+# Function to plot alpha diversity indices without p-value annotations
+alpha_diversity_plot <- function(data, measure = "Shannon", group_col = "Group", title = NULL) {
+  valid_measures <- c("Shannon", "GiniSimpson")
+  if (!(measure %in% valid_measures)) {
+    stop("Invalid measure. Choose from: Shannon,GiniSimpson")
+  }
+  
+  if (!group_col %in% colnames(data)) {
+    stop("The specified group column does not exist in the data.")
+  }
+  
+  data[[group_col]] <- as.factor(data[[group_col]])
+  if (!(measure %in% colnames(data))) {
+    stop(paste("Measure", measure, "is not present in the data."))
+  }
+  data[[measure]] <- as.numeric(data[[measure]])
+  
+  num_groups <- length(unique(data[[group_col]]))
+  palette <- if (num_groups == 2) c("#D95F02", "#1B9E77") else c("#3288bd", "#d53e4f", "#62954C", "#C59144")
+  
+  plot <- ggpubr::ggviolin(
+    data,
+    x = group_col,
+    y = measure,
+    color = "black",
+    add = "boxplot",
+    fill = group_col,
+    palette = palette,
+    legend = "none"
+  ) +
+    geom_jitter(shape = 16, position = position_jitter(0.2), size = 1) +
+    ggplot2::xlab("") +
+    ggplot2::ylab(toupper(measure)) +
+    ggthemes::theme_pander() +
+    ggplot2::theme(
+      panel.grid.major = ggplot2::element_line(color = "grey80", linewidth = 0.5),
+      panel.grid.minor = ggplot2::element_line(color = "grey90", linewidth = 0.25),
+      axis.text.x = element_text(size = 18),
+      axis.text.y = element_text(size = 18),
+      axis.title.y = element_text(size = 18, angle = 90, margin = margin(l = 10))
+    )
+  
+  if (!is.null(title)) {
+    plot <- plot + ggplot2::ggtitle(title)
+  }
+  
+  return(plot)
+}
+
+# Compute p-values separately
+p_values <- compute_mann_whitney_pvalues(data = diversity_measures, measure = "Shannon", group_col = "Group")
+print(p_values)  # Print the p-values
+
+# Plot the graph without p-value annotations
+plot <- alpha_diversity_plot(data = diversity_measures, measure = "Shannon", group_col = "Group", title = "Shannon Diversity Index GC")
+print(plot)
+
+```
+
+#Gini-Simpson Index for GC
+
+```{r}
+
+
+# Function to plot alpha diversity indices without p-value annotations 
+alpha_diversity_plot <- function(data, measure = "GiniSimpson", group_col = "Group", title = NULL) {
+  valid_measures <- c("Shannon","GiniSimpson")
+  if (!(measure %in% valid_measures)) {
+    stop("Invalid measure. Choose from: Shannon, GiniSimpson")
+  }
+  
+  if (!group_col %in% colnames(data)) {
+    stop("The specified group column does not exist in the data.")
+  }
+  
+  data[[group_col]] <- as.factor(data[[group_col]])
+  if (!(measure %in% colnames(data))) {
+    stop(paste("Measure", measure, "is not present in the data."))
+  }
+  data[[measure]] <- as.numeric(data[[measure]])
+  
+  num_groups <- length(unique(data[[group_col]]))
+  palette <- if (num_groups == 2) c("#D95F02", "#1B9E77") else c("#3288bd", "#d53e4f", "#62954C", "#C59144")
+  
+  plot <- ggpubr::ggviolin(
+    data,
+    x = group_col,
+    y = measure,
+    color = "black",
+    add = "boxplot",
+    fill = group_col,
+    palette = palette,
+    legend = "none"
+  ) +
+    geom_jitter(shape = 16, position = position_jitter(0.2), size = 1) +
+    ggplot2::xlab("") +
+    ggplot2::ylab(toupper(measure)) +
+    ggthemes::theme_pander() +
+    ggplot2::theme(
+      panel.grid.major = ggplot2::element_line(color = "grey80", linewidth = 0.5),
+      panel.grid.minor = ggplot2::element_line(color = "grey90", linewidth = 0.25),
+      axis.text.x = element_text(size = 18),
+      axis.text.y = element_text(size = 18),
+      axis.title.y = element_text(size = 18, angle = 90, margin = margin(l = 10))
+    )
+  
+  if (!is.null(title)) {
+    plot <- plot + ggplot2::ggtitle(title)
+  }
+  
+  return(plot)
+}
+
+# Compute p-values separately
+p_values <- compute_mann_whitney_pvalues(data = diversity_measures, measure = "GiniSimpson", group_col = "Group")
+print(p_values)  
+
+# Plot the graph without p-value annotations
+plot <- alpha_diversity_plot(data = diversity_measures, measure = "GiniSimpson", group_col = "Group", title = "Gini Simpson Diversity Index GC")
+print(plot)
+
+```
+
+#Beta Diversity for GC
+
+```{r}
+
+ge_datas <- gc_al %>%
+  select(-Group) %>%
+  mutate_if(is.character, as.numeric)
+
+ge_jaccard <- vegdist(ge_datas, method = "jaccard") # Calculate the Jaccard index
+ge_nmds <- metaMDS(ge_jaccard, distance = "jaccard", k = 4, trymax = 1000) # Perform NMDS
+stress_value <- ge_nmds$stress
+
+
+plot_df <- as.data.frame(scores(ge_nmds, display = "sites"))
+plot_df$Group <- gc_alp$Group
+
+
+pal <- c("Healthy" = "#1B9E77", "Gastrectomy" = "#D95F02")
+
+# Create the NMDS plot
+plot_nmds <- ggplot(plot_df, aes(x = NMDS1, y = NMDS2, color = Group, shape = Group)) +
+  geom_point(size = 4, alpha = 1, , shape = 16) +
+  scale_color_manual(values = pal) +
+  stat_ellipse(linetype = 2, linewidth = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "NMDS of Jaccard Distances for Gastric Cancer",
+    x = "NMDS1",
+    y = "NMDS2"
+  ) +
+  theme(
+    axis.title.x = element_text(size = 16),  # Increase x-axis title size
+    axis.title.y = element_text(size = 16),  # Increase y-axis title size
+    axis.text = element_text(size = 14),     # Increase axis text size
+    legend.text = element_text(size = 14),    # Increase legend text size
+    legend.title = element_text(size = 16)    # Increase legend title size
+  )   
+
+print(plot_nmds)
+print(stress_value)
+
+```
+
+#Alpha Diversity for CRC microbes
+
+```{r}
+cc_al = read_excel("CC-gene.xlsx")
+cc_al
+```
+
+```{r}
+alpha_diversity_measures <- function(data, group_col = "Group") {
+  if (!group_col %in% colnames(data)) {
+    stop("The specified group column does not exist in the data.")
+  }
+
+  data[[group_col]] <- as.factor(data[[group_col]])
+  data_no_group <- data[, !(names(data) %in% group_col)]
+  data_no_group[] <- lapply(data_no_group, as.numeric)
+
+
+  if (any(is.na(data_no_group))) {
+    stop("The data contains NA values. Please handle them before calculating diversity.")
+  }
+
+
+  if (any(data_no_group < 0)) {
+    stop("All abundance values must be non-negative.")
+  }
+
+  # Calculate alpha diversity indices
+  shannon_diversity <- vegan::diversity(data_no_group, index = "shannon")
+  gini_simpson_diversity <- 1 - vegan::diversity(data_no_group, index = "simpson")
+
+  # Create a data frame to store diversity measures
+  diversity_measures <- data.frame(
+    SampleID = rownames(data),
+    Group = data[[group_col]],
+    Shannon = shannon_diversity,
+    GiniSimpson = gini_simpson_diversity
+  )
+
+  groups <- levels(data[[group_col]])
+  group_pairs <- combn(groups, 2, simplify = FALSE)
+
+  list(
+    diversity_measures = diversity_measures,
+    group_pairs = group_pairs
+  )
+}
+
+results <- alpha_diversity_measures(cc_al, group_col = "Group")
+diversity_measures <- results$diversity_measures
+group_pairs <- results$group_pairs
+
+print(diversity_measures)
+print(group_pairs)
+
+```
+
+
+#Shannon-Diversity Index for IBD
+
+```{r}
+# Function to compute Mann-Whitney U test p-values with FDR correction
+compute_mann_whitney_pvalues <- function(data, measure, group_col) {
+  unique_groups <- unique(data[[group_col]])
+  group_comparisons <- combn(unique_groups, 2, simplify = FALSE)
+  pvalues <- numeric(length(group_comparisons))
+  names(pvalues) <- sapply(group_comparisons, function(x) paste(x, collapse = " vs "))
+  
+  for (i in seq_along(group_comparisons)) {
+    comparison <- group_comparisons[[i]]
+    group1_data <- data[data[[group_col]] == comparison[1], measure, drop = TRUE]
+    group2_data <- data[data[[group_col]] == comparison[2], measure, drop = TRUE]
+    test_result <- wilcox.test(group1_data, group2_data, exact = FALSE)
+    pvalues[i] <- test_result$p.value
+  }
+  
+  pvalues <- p.adjust(pvalues, method = "fdr")
+  
+  return(pvalues)
+}
+
+
+# Function to plot alpha diversity indices without p-value annotations
+alpha_diversity_plot <- function(data, measure = "Shannon", group_col = "Group", title = NULL) {
+  valid_measures <- c("Shannon", "GiniSimpson")
+  if (!(measure %in% valid_measures)) {
+    stop("Invalid measure. Choose from: Shannon,GiniSimpson")
+  }
+  
+  if (!group_col %in% colnames(data)) {
+    stop("The specified group column does not exist in the data.")
+  }
+  
+  data[[group_col]] <- as.factor(data[[group_col]])
+  if (!(measure %in% colnames(data))) {
+    stop(paste("Measure", measure, "is not present in the data."))
+  }
+  data[[measure]] <- as.numeric(data[[measure]])
+  
+  num_groups <- length(unique(data[[group_col]]))
+  palette <- if (num_groups == 2) c("#D95F02", "#1B9E77") else c("#3288bd", "#d53e4f", "#62954C", "#C59144")
+  
+  plot <- ggpubr::ggviolin(
+    data,
+    x = group_col,
+    y = measure,
+    color = "black",
+    add = "boxplot",
+    fill = group_col,
+    palette = palette,
+    legend = "none"
+  ) +
+    geom_jitter(shape = 16, position = position_jitter(0.2), size = 1) +
+    ggplot2::xlab("") +
+    ggplot2::ylab(toupper(measure)) +
+    ggthemes::theme_pander() +
+    ggplot2::theme(
+      panel.grid.major = ggplot2::element_line(color = "grey80", linewidth = 0.5),
+      panel.grid.minor = ggplot2::element_line(color = "grey90", linewidth = 0.25),
+      axis.text.x = element_text(size = 18),
+      axis.text.y = element_text(size = 18),
+      axis.title.y = element_text(size = 18, angle = 90, margin = margin(l = 10))
+    )
+  
+  if (!is.null(title)) {
+    plot <- plot + ggplot2::ggtitle(title)
+  }
+  
+  return(plot)
+}
+
+# Compute p-values separately
+p_values <- compute_mann_whitney_pvalues(data = diversity_measures, measure = "Shannon", group_col = "Group")
+print(p_values)  
+
+# Plot the graph without p-value annotations
+plot <- alpha_diversity_plot(data = diversity_measures, measure = "Shannon", group_col = "Group", title = "Shannon Diversity Index CRC")
+print(plot)
+
+```
+
+#Gini-Simpson Index for CRC
+
+```{r}
+
+
+# Function to plot alpha diversity indices without p-value annotations 
+alpha_diversity_plot <- function(data, measure = "GiniSimpson", group_col = "Group", title = NULL) {
+  valid_measures <- c("Shannon","GiniSimpson")
+  if (!(measure %in% valid_measures)) {
+    stop("Invalid measure. Choose from: Shannon, GiniSimpson")
+  }
+  
+  if (!group_col %in% colnames(data)) {
+    stop("The specified group column does not exist in the data.")
+  }
+  
+  data[[group_col]] <- as.factor(data[[group_col]])
+  if (!(measure %in% colnames(data))) {
+    stop(paste("Measure", measure, "is not present in the data."))
+  }
+  data[[measure]] <- as.numeric(data[[measure]])
+  
+  num_groups <- length(unique(data[[group_col]]))
+  palette <- if (num_groups == 2) c("#D95F02", "#1B9E77") else c("#3288bd", "#d53e4f", "#62954C", "#C59144")
+  
+  plot <- ggpubr::ggviolin(
+    data,
+    x = group_col,
+    y = measure,
+    color = "black",
+    add = "boxplot",
+    fill = group_col,
+    palette = palette,
+    legend = "none"
+  ) +
+    geom_jitter(shape = 16, position = position_jitter(0.2), size = 1) +
+    ggplot2::xlab("") +
+    ggplot2::ylab(toupper(measure)) +
+    ggthemes::theme_pander() +
+    ggplot2::theme(
+      panel.grid.major = ggplot2::element_line(color = "grey80", linewidth = 0.5),
+      panel.grid.minor = ggplot2::element_line(color = "grey90", linewidth = 0.25),
+      axis.text.x = element_text(size = 18),
+      axis.text.y = element_text(size = 18),
+      axis.title.y = element_text(size = 18, angle = 90, margin = margin(l = 10))
+    )
+  
+  if (!is.null(title)) {
+    plot <- plot + ggplot2::ggtitle(title)
+  }
+  
+  return(plot)
+}
+
+
+p_values <- compute_mann_whitney_pvalues(data = diversity_measures, measure = "GiniSimpson", group_col = "Group")
+print(p_values)  
+
+# Plot the graph without p-value annotations
+plot <- alpha_diversity_plot(data = diversity_measures, measure = "GiniSimpson", group_col = "Group", title = "Gini Simpson Diversity Index CRC")
+print(plot)
+
+```
+
+
+#Beta Diversity for CRC
+
+```{r}
+
+ge_datas <- cc_al %>%
+  select(-Group) %>%
+  mutate_if(is.character, as.numeric)
+
+
+ge_jaccard <- vegdist(ge_datas, method = "jaccard") # Calculate the Jaccard index
+ge_nmds <- metaMDS(ge_jaccard, distance = "jaccard", k = 4, trymax = 1000) # Perform NMDS
+stress_value <- ge_nmds$stress
+plot_df <- as.data.frame(scores(ge_nmds, display = "sites"))
+plot_df$Group <- cc_al$Group
+pal <- c("Healthy" = "#1B9E77", "Colon Cancer" = "#D95F02")
+
+#Plot NMDS
+plot_nmds <- ggplot(plot_df, aes(x = NMDS1, y = NMDS2, color = Group, shape = Group)) +
+  geom_point(size = 4, alpha = 1, shape = 16) +
+  scale_color_manual(values = pal) +
+  stat_ellipse(linetype = 2, linewidth = 1.3) + 
+  theme_minimal() +
+  labs(
+    title = "NMDS of Jaccard Distances for Colon Cancer",
+    x = "NMDS1",
+    y = "NMDS2"
+  ) +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text = element_text(size = 14),
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 16)
+  )
+
+
+print(plot_nmds)
+print(stress_value)
+
+```
+
+
+
+#Alpha Diversity for IBD microbes
+
+```{r}
+ibd_al = read_excel("IBD-gene.xlsx")
+ibd_al
+```
+
+```{r}
+alpha_diversity_measures <- function(data, group_col = "Group") {
+  if (!group_col %in% colnames(data)) {
+    stop("The specified group column does not exist in the data.")
+  }
+
+  data[[group_col]] <- as.factor(data[[group_col]])
+  data_no_group <- data[, !(names(data) %in% group_col)]
+  data_no_group[] <- lapply(data_no_group, as.numeric)
+
+
+  if (any(is.na(data_no_group))) {
+    stop("The data contains NA values. Please handle them before calculating diversity.")
+  }
+
+
+  if (any(data_no_group < 0)) {
+    stop("All abundance values must be non-negative.")
+  }
+
+  # Calculate alpha diversity indices
+  shannon_diversity <- vegan::diversity(data_no_group, index = "shannon")
+  gini_simpson_diversity <- 1 - vegan::diversity(data_no_group, index = "simpson")
+
+  # Create a data frame to store diversity measures
+  diversity_measures <- data.frame(
+    SampleID = rownames(data),
+    Group = data[[group_col]],
+    Shannon = shannon_diversity,
+    GiniSimpson = gini_simpson_diversity
+  )
+
+  groups <- levels(data[[group_col]])
+  group_pairs <- combn(groups, 2, simplify = FALSE)
+
+  list(
+    diversity_measures = diversity_measures,
+    group_pairs = group_pairs
+  )
+}
+
+results <- alpha_diversity_measures(ibd_al, group_col = "Group")
+diversity_measures <- results$diversity_measures
+group_pairs <- results$group_pairs
+
+print(diversity_measures)
+print(group_pairs)
+
+```
+
+
+#Shannon-Diversity Index for IBD
+
+```{r}
+# Function to compute Mann-Whitney U test p-values with FDR correction
+compute_mann_whitney_pvalues <- function(data, measure, group_col) {
+  unique_groups <- unique(data[[group_col]])
+  group_comparisons <- combn(unique_groups, 2, simplify = FALSE)
+  pvalues <- numeric(length(group_comparisons))
+  names(pvalues) <- sapply(group_comparisons, function(x) paste(x, collapse = " vs "))
+  
+  for (i in seq_along(group_comparisons)) {
+    comparison <- group_comparisons[[i]]
+    group1_data <- data[data[[group_col]] == comparison[1], measure, drop = TRUE]
+    group2_data <- data[data[[group_col]] == comparison[2], measure, drop = TRUE]
+    test_result <- wilcox.test(group1_data, group2_data, exact = FALSE)
+    pvalues[i] <- test_result$p.value
+  }
+  
+  pvalues <- p.adjust(pvalues, method = "fdr")
+  
+  return(pvalues)
+}
+
+
+# Function to plot alpha diversity indices without p-value annotations
+alpha_diversity_plot <- function(data, measure = "Shannon", group_col = "Group", title = NULL) {
+  valid_measures <- c("Shannon", "GiniSimpson")
+  if (!(measure %in% valid_measures)) {
+    stop("Invalid measure. Choose from: Shannon,GiniSimpson")
+  }
+  
+  if (!group_col %in% colnames(data)) {
+    stop("The specified group column does not exist in the data.")
+  }
+  
+  data[[group_col]] <- as.factor(data[[group_col]])
+  if (!(measure %in% colnames(data))) {
+    stop(paste("Measure", measure, "is not present in the data."))
+  }
+  data[[measure]] <- as.numeric(data[[measure]])
+  
+  num_groups <- length(unique(data[[group_col]]))
+  palette <- if (num_groups == 2) c("#D95F02", "#1B9E77") else c("#3288bd", "#d53e4f", "#62954C", "#C59144")
+  
+  plot <- ggpubr::ggviolin(
+    data,
+    x = group_col,
+    y = measure,
+    color = "black",
+    add = "boxplot",
+    fill = group_col,
+    palette = palette,
+    legend = "none"
+  ) +
+    geom_jitter(shape = 16, position = position_jitter(0.2), size = 1) +
+    ggplot2::xlab("") +
+    ggplot2::ylab(toupper(measure)) +
+    ggthemes::theme_pander() +
+    ggplot2::theme(
+      panel.grid.major = ggplot2::element_line(color = "grey80", linewidth = 0.5),
+      panel.grid.minor = ggplot2::element_line(color = "grey90", linewidth = 0.25),
+      axis.text.x = element_text(size = 18),
+      axis.text.y = element_text(size = 18),
+      axis.title.y = element_text(size = 18, angle = 90, margin = margin(l = 10))
+    )
+  
+  if (!is.null(title)) {
+    plot <- plot + ggplot2::ggtitle(title)
+  }
+  
+  return(plot)
+}
+
+# Compute p-values separately
+p_values <- compute_mann_whitney_pvalues(data = diversity_measures, measure = "Shannon", group_col = "Group")
+print(p_values)  
+
+# Plot the graph without p-value annotations
+plot <- alpha_diversity_plot(data = diversity_measures, measure = "Shannon", group_col = "Group", title = "Shannon Diversity Index IBD")
+print(plot)
+
+```
+
+#Gini-Simpson Index for IBD
+
+```{r}
+
+
+# Function to plot alpha diversity indices without p-value annotations 
+alpha_diversity_plot <- function(data, measure = "GiniSimpson", group_col = "Group", title = NULL) {
+  valid_measures <- c("Shannon","GiniSimpson")
+  if (!(measure %in% valid_measures)) {
+    stop("Invalid measure. Choose from: Shannon, GiniSimpson")
+  }
+  
+  if (!group_col %in% colnames(data)) {
+    stop("The specified group column does not exist in the data.")
+  }
+  
+  data[[group_col]] <- as.factor(data[[group_col]])
+  if (!(measure %in% colnames(data))) {
+    stop(paste("Measure", measure, "is not present in the data."))
+  }
+  data[[measure]] <- as.numeric(data[[measure]])
+  
+  num_groups <- length(unique(data[[group_col]]))
+  palette <- if (num_groups == 2) c("#D95F02", "#1B9E77") else c("#3288bd", "#d53e4f", "#62954C", "#C59144")
+  
+  plot <- ggpubr::ggviolin(
+    data,
+    x = group_col,
+    y = measure,
+    color = "black",
+    add = "boxplot",
+    fill = group_col,
+    palette = palette,
+    legend = "none"
+  ) +
+    geom_jitter(shape = 16, position = position_jitter(0.2), size = 1) +
+    ggplot2::xlab("") +
+    ggplot2::ylab(toupper(measure)) +
+    ggthemes::theme_pander() +
+    ggplot2::theme(
+      panel.grid.major = ggplot2::element_line(color = "grey80", linewidth = 0.5),
+      panel.grid.minor = ggplot2::element_line(color = "grey90", linewidth = 0.25),
+      axis.text.x = element_text(size = 18),
+      axis.text.y = element_text(size = 18),
+      axis.title.y = element_text(size = 18, angle = 90, margin = margin(l = 10))
+    )
+  
+  if (!is.null(title)) {
+    plot <- plot + ggplot2::ggtitle(title)
+  }
+  
+  return(plot)
+}
+
+
+p_values <- compute_mann_whitney_pvalues(data = diversity_measures, measure = "GiniSimpson", group_col = "Group")
+print(p_values)  
+
+# Plot the graph without p-value annotations
+plot <- alpha_diversity_plot(data = diversity_measures, measure = "GiniSimpson", group_col = "Group", title = "Gini Simpson Diversity Index IBD")
+print(plot)
+
+```
+
+#Beta Diversity in IBD
+
+```{r}
+
+ge_datas <- ibd_al %>%
+  select(-Group) %>%
+  mutate_if(is.character, as.numeric)
+ge_jaccard <- vegdist(ge_datas, method = "jaccard") # Calculate the Jaccard index
+ge_nmds <- metaMDS(ge_jaccard, distance = "jaccard", k = 4, trymax = 1000) # Perform NMDS
+stress_value <- ge_nmds$stress
+
+
+plot_df <- as.data.frame(scores(ge_nmds, display = "sites"))
+plot_df$Group <- ibd_al$Group
+pal <- c("IBD" = "#D95F02","Healthy" = "#1B9E77")
+
+plot_nmds <- ggplot(plot_df, aes(x = NMDS1, y = NMDS2, color = Group, shape = Group)) +
+  geom_point(size = 4, alpha = 1, shape = 16) +
+  scale_color_manual(values = pal) +
+  stat_ellipse(linetype = 2, linewidth = 1.3) +  
+  theme_minimal() +
+  labs(
+    title = "NMDS of Jaccard Distances for IBD",
+    x = "NMDS1",
+    y = "NMDS2"
+  ) +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text = element_text(size = 14),
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 16)
+  ) 
+
+
+# Print the plot
+print(plot_nmds)
+print(stress_value)
+
+```
+

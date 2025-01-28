@@ -1,0 +1,384 @@
+---
+title: "Correlation Heatmaps"
+author: "Daryll Susan Philip"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(reshape2)
+library(pheatmap)
+library(dplyr)
+library(readxl)
+library(grid)
+```
+
+#Load GC datasets
+```{r}
+gc_gene = read_excel("Top 15 GC micorbes.xlsx")
+gc_gene
+
+gc_mtb = read_excel("Top 30 GC metabolites.xlsx")
+gc_mtb
+```
+
+#Exclude the sample column
+```{r}
+gc_gene <- gc_gene[, !colnames(gc_gene) %in% "Group"]
+gc_mtb <- gc_mtb[, !colnames(gc_mtb) %in% "Group"]
+```
+
+#Convert non-numeric column to numeric
+```{r}
+gc_gene <- gc_gene %>%
+  mutate(across(where(is.character), as.numeric))
+gc_mtb <- gc_mtb %>%
+  mutate(across(where(is.character), as.numeric))
+```
+
+#GC-microbes
+```{r}
+
+
+# Initialize matrices for correlations and p-values
+correlation_matrix <- matrix(NA, nrow = ncol(gc_gene), ncol = ncol(gc_gene))
+pval_matrix <- matrix(NA, nrow = ncol(gc_gene), ncol = ncol(gc_gene))
+
+# Compute Spearman correlation and p-values for the variables
+for (i in seq_len(ncol(gc_gene))) {
+  for (j in seq_len(ncol(gc_gene))) {
+    test <- cor.test(gc_gene[[i]], gc_gene[[j]], method = "spearman", exact = FALSE)
+    correlation_matrix[i, j] <- test$estimate
+    pval_matrix[i, j] <- test$p.value
+  }
+}
+
+
+fdr_pval_matrix <- apply(pval_matrix, 2, p.adjust, method = "fdr")  # FDR correction
+italicize_names <- function(names_vector) {
+  paste0("italic('", names_vector, "')")
+} # Function to convert microbe names to italics
+
+# Convert row and column names to italicized format
+rownames(correlation_matrix) <- italicize_names(colnames(gc_gene))
+colnames(correlation_matrix) <- italicize_names(colnames(gc_gene))
+rownames(fdr_pval_matrix) <- italicize_names(colnames(gc_gene))
+colnames(fdr_pval_matrix) <- italicize_names(colnames(gc_gene))
+
+# Custom pheatmap function for italics
+plot_heatmap_with_italics <- function(correlation_matrix title) {
+  pheatmap(correlation_matrix, 
+           color = colorRampPalette(c("blue", "white", "red"))(200),
+           fontsize = 18,         
+           main = title, 
+           cluster_rows = TRUE, 
+           cluster_cols = TRUE, 
+           border_color = "black",
+           number_color = "black",
+           labels_row = parse(text = rownames(correlation_matrix)),
+           labels_col = parse(text = colnames(correlation_matrix)))  # Render italics
+}
+
+# Plot the heatmap
+plot_heatmap_with_italics(correlation_matrix, fdr_significance_stars, 
+                          "Spearman Correlation Clustermap For Microbes (GC) ")
+
+```
+
+
+#GC-metabolites
+```{r}
+
+# Initialize matrices for correlations and p-values
+correlation_matrix <- matrix(NA, nrow = ncol(gc_mtb), ncol = ncol(gc_mtb))
+pval_matrix <- matrix(NA, nrow = ncol(gc_mtb), ncol = ncol(gc_mtb))
+
+# Compute Spearman correlation and p-values for each pair of variables
+for (i in seq_len(ncol(gc_mtb))) {
+  for (j in seq_len(ncol(gc_mtb))) {
+    test <- cor.test(gc_mtb[[i]], gc_mtb[[j]], method = "spearman", exact = FALSE)
+    correlation_matrix[i, j] <- test$estimate
+    pval_matrix[i, j] <- test$p.value
+  }
+}
+
+
+fdr_pval_matrix <- apply(pval_matrix, 2, p.adjust, method = "fdr") # FDR correction
+
+# Add row and column names to matrices
+rownames(correlation_matrix) <- colnames(gc_mtb)
+colnames(correlation_matrix) <- colnames(gc_mtb)
+rownames(fdr_pval_matrix) <- colnames(gc_mtb)
+colnames(fdr_pval_matrix) <- colnames(gc_mtb)
+fdr_significance <- create_significance_matrix(fdr_pval_matrix)
+
+# Plot heatmap with stars (FDR-corrected)
+plot_heatmap <- function(correlation_matrix,title) {
+  pheatmap(correlation_matrix, 
+           color = colorRampPalette(c("blue", "white", "red"))(200), 
+           fontsize = 12,         
+           main = title, 
+           cluster_rows = TRUE, 
+           cluster_cols = TRUE, 
+           border_color = "black",
+           number_color = "black")  
+}
+
+# Plot the heatmap
+plot_heatmap(correlation_matrix, fdr_significance, 
+                        "Spearman Correlation Clustermap For Metabolites (GC)")
+
+```
+
+
+#Load CRC datasets
+```{r}
+cc_gene = read_excel("CC microbes.xlsx")
+cc_gene
+
+cc_mtb = read_excel("cc metabolites.xlsx")
+cc_mtb
+```
+
+#Exclude the sample column
+```{r}
+cc_gene <- cc_gene[, !colnames(cc_gene) %in% "Group"]
+cc_mtb <- cc_mtb[, !colnames(cc_mtb) %in% "Group"]
+```
+
+#Convert non-numeric column to numeric
+```{r}
+cc_gene <- cc_gene %>%
+  mutate(across(where(is.character), as.numeric))
+
+cc_mtb <- cc_mtb %>%
+  mutate(across(where(is.character), as.numeric))
+```
+
+
+#CRC microbes
+
+```{r}
+
+# Initialize matrices for correlations and p-values
+correlation_matrix <- matrix(NA, nrow = ncol(cc_gene), ncol = ncol(cc_gene))
+pval_matrix <- matrix(NA, nrow = ncol(cc_gene), ncol = ncol(cc_gene))
+
+# Compute Spearman correlation and p-values for variables
+for (i in seq_len(ncol(cc_gene))) {
+  for (j in seq_len(ncol(cc_gene))) {
+    test <- cor.test(cc_gene[[i]], cc_gene[[j]], method = "spearman", exact = FALSE)
+    correlation_matrix[i, j] <- test$estimate
+    pval_matrix[i, j] <- test$p.value
+  }
+}
+
+
+
+fdr_pval_matrix <- apply(pval_matrix, 2, p.adjust, method = "fdr") # FDR correction
+italicize_names <- function(names_vector) {
+  paste0("italic('", names_vector, "')")
+} # Function to convert microbe names to italics
+
+# Convert row and column names to italicized format
+rownames(correlation_matrix) <- italicize_names(colnames(cc_gene))
+colnames(correlation_matrix) <- italicize_names(colnames(cc_gene))
+rownames(fdr_pval_matrix) <- italicize_names(colnames(cc_gene))
+colnames(fdr_pval_matrix) <- italicize_names(colnames(cc_gene))
+
+# Custom pheatmap function for italics
+plot_heatmap_with_italics <- function(correlation_matrix, title) {
+  pheatmap(correlation_matrix, 
+           color = colorRampPalette(c("blue", "white", "red"))(200),
+           fontsize = 18,         
+           main = title, 
+           cluster_rows = TRUE, 
+           cluster_cols = TRUE, 
+           border_color = "black",
+           number_color = "black",
+           labels_row = parse(text = rownames(correlation_matrix)),
+           labels_col = parse(text = colnames(correlation_matrix)))  
+}
+
+# Plot the heatmap
+plot_heatmap_with_italics(correlation_matrix, fdr_significance_stars, 
+                          "Spearman Correlation Clustermap For Microbes (CRC) ")
+
+```
+
+#CRC metabolites
+
+```{r}
+# Initialize matrices for correlations and p-values
+correlation_matrix <- matrix(NA, nrow = ncol(cc_mtb), ncol = ncol(cc_mtb))
+pval_matrix <- matrix(NA, nrow = ncol(cc_mtb), ncol = ncol(cc_mtb))
+
+# Compute Spearman correlation and p-values for each pair of variables
+for (i in seq_len(ncol(cc_mtb))) {
+  for (j in seq_len(ncol(cc_mtb))) {
+    test <- cor.test(cc_mtb[[i]], cc_mtb[[j]], method = "spearman", exact = FALSE)
+    correlation_matrix[i, j] <- test$estimate
+    pval_matrix[i, j] <- test$p.value
+  }
+}
+
+
+
+fdr_pval_matrix <- apply(pval_matrix, 2, p.adjust, method = "fdr")  # FDR correction
+
+# Add row and column names to matrices
+rownames(correlation_matrix) <- colnames(cc_mtb)
+colnames(correlation_matrix) <- colnames(cc_mtb)
+rownames(fdr_pval_matrix) <- colnames(cc_mtb)
+colnames(fdr_pval_matrix) <- colnames(cc_mtb)
+fdr_significance <- create_significance_matrix(fdr_pval_matrix)
+
+# Plot heatmap(FDR-corrected)
+plot_heatmap <- function(correlation_matrix, title) {
+  pheatmap(correlation_matrix, 
+           color = colorRampPalette(c("blue", "white", "red"))(200), 
+           fontsize = 12,
+           main = title, 
+           cluster_rows = TRUE, 
+           cluster_cols = TRUE, 
+           border_color = "black",
+           number_color = "black")  
+}
+
+# Plot the heatmap
+plot_heatmap(correlation_matrix, fdr_significance, 
+                        "Spearman Correlation Clustermap For Metabolites (CRC)")
+
+```
+
+#Load IBD datasets
+
+```{r}
+#microbiome
+ibd_gene = read_excel("IBD microbes.xlsx")
+ibd_gene
+
+#metabolome
+ibd_mtb = read_excel("IBD-metabolites.xlsx")
+ibd_mtb
+```
+
+#Exclude the sample column
+```{r}
+ibd_gene <- ibd_gene[, !colnames(ibd_gene) %in% "Group"]
+ibd_mtb <- ibd_mtb[, !colnames(ibd_mtb) %in% "Group"]
+```
+
+#Convert non-numeric column to numeric
+```{r}
+ibd_gene <- ibd_gene %>%
+  mutate(across(where(is.character), as.numeric))
+
+ibd_mtb <- ibd_mtb %>%
+  mutate(across(where(is.character), as.numeric))
+```
+
+
+#IBD-Microbes
+```{r}
+
+# Initialize matrices for correlations and p-values
+correlation_matrix <- matrix(NA, nrow = ncol(ibd_gene), ncol = ncol(ibd_gene))
+pval_matrix <- matrix(NA, nrow = ncol(ibd_gene), ncol = ncol(ibd_gene))
+
+# Compute Spearman correlation and p-values for each pair of variables
+for (i in seq_len(ncol(ibd_gene))) {
+  for (j in seq_len(ncol(ibd_gene))) {
+    test <- cor.test(ibd_gene[[i]], ibd_gene[[j]], method = "spearman", exact = FALSE)
+    correlation_matrix[i, j] <- test$estimate
+    pval_matrix[i, j] <- test$p.value
+  }
+}
+
+
+
+fdr_pval_matrix <- apply(pval_matrix, 2, p.adjust, method = "fdr") # FDR correction
+italicize_names <- function(names_vector) {
+  paste0("italic('", names_vector, "')")
+} # Function to convert microbe names to italics
+
+# Convert row and column names to italicized format
+rownames(correlation_matrix) <- italicize_names(colnames(ibd_gene))
+colnames(correlation_matrix) <- italicize_names(colnames(ibd_gene))
+rownames(fdr_pval_matrix) <- italicize_names(colnames(ibd_gene))
+colnames(fdr_pval_matrix) <- italicize_names(colnames(ibd_gene))
+
+# Custom pheatmap function for italics
+plot_heatmap_with_italics <- function(correlation_matrix, title) {
+  pheatmap(correlation_matrix, 
+           color = colorRampPalette(c("blue", "white", "red"))(200),
+           fontsize = 18,         
+           main = title, 
+           cluster_rows = TRUE, 
+           cluster_cols = TRUE, 
+           border_color = "black",
+           number_color = "black",
+           labels_row = parse(text = rownames(correlation_matrix)),
+           labels_col = parse(text = colnames(correlation_matrix)))  # Render italics
+}
+
+# Plot the heatmap
+plot_heatmap_with_italics(correlation_matrix, fdr_significance_stars, 
+                          "Spearman Correlation Clustermap For Microbes (IBD) ")
+
+```
+
+#IBD-Metabolites
+```{r}
+
+# Initialize matrices for correlations and p-values
+correlation_matrix <- matrix(NA, nrow = ncol(ibd_mtb), ncol = ncol(ibd_mtb))
+pval_matrix <- matrix(NA, nrow = ncol(ibd_mtb), ncol = ncol(ibd_mtb))
+
+# Compute Spearman correlation and p-values for each pair of variables
+for (i in seq_len(ncol(ibd_mtb))) {
+  for (j in seq_len(ncol(ibd_mtb))) {
+    test <- cor.test(ibd_mtb[[i]], ibd_mtb[[j]], method = "spearman", exact = FALSE)
+    correlation_matrix[i, j] <- test$estimate
+    pval_matrix[i, j] <- test$p.value
+  }
+}
+
+
+# FDR correction
+fdr_pval_matrix <- apply(pval_matrix, 2, p.adjust, method = "fdr")  
+
+
+# Add row and column names to matrices
+rownames(correlation_matrix) <- colnames(ibd_mtb)
+colnames(correlation_matrix) <- colnames(ibd_mtb)
+rownames(fdr_pval_matrix) <- colnames(ibd_mtb)
+colnames(fdr_pval_matrix) <- colnames(ibd_mtb)
+fdr_significance <- create_significance_matrix(fdr_pval_matrix)
+
+# Plot heatmap with stars (FDR-corrected)
+plot_heatmap <- function(correlation_matrix, title) {
+  pheatmap(correlation_matrix, 
+           color = colorRampPalette(c("blue", "white", "red"))(200), 
+           #display_numbers = stars_matrix, 
+           fontsize = 12,         # Increase font size for row/column labels
+           #fontsize_number = 16,  # Increase font size for numbers/stars
+           main = title, 
+           cluster_rows = TRUE, 
+           cluster_cols = TRUE, 
+           border_color = "black",
+           number_color = "black")  # Ensure number color is black for visibility
+}
+
+# Plot the heatmap
+plot_heatmap(correlation_matrix, fdr_significance, 
+                        "Spearman Correlation Clustermap For Metabolites (IBD)")
+
+```

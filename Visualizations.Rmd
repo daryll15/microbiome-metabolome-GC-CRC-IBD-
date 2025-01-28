@@ -1,0 +1,885 @@
+---
+title: "Extra visualizations"
+author: "Daryll Susan Philip"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Load required packages
+```{r}
+library(tidyverse)      
+library(forcats)         
+library(glue) 
+library(devtools)
+library(ggplot2)
+```
+
+#Gastric Cancer Model
+
+```{r}
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accura
+               cy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.92, 0.79, 0.81, 0.91, 0.80, 0.69,  # XGBoost metrics
+            0.94, 0.79, 0.71, 0.91, 0.80, 0.69,  # Random Forest metrics
+            0.86, 0.83, 0.90, 0.82, 0.86, 0.92)  # LASSO metrics
+)
+
+# Adding IDs to separate sections for each model
+data <- data %>%
+  mutate(id = row_number() + rep(0:2 * 6, each = 6)) %>%  # Offset each model's group by 6 IDs
+  mutate(group = fct_relevel(group, "XGBoost", "Random Forest", "LASSO")) 
+
+# Define custom colors for each model
+custom_colors <- c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")
+
+# Plot
+ggplot(data, aes(x = factor(id), y = value * 100, fill = group)) +
+  geom_bar(aes(y = 100), stat = "identity", width = 1, color = "white", alpha = 0.5) +
+  geom_bar(stat = "identity", width = 1, color = "white", size = 1.1) +
+  geom_label(aes(label = round(value * 100, 2), fill = group), size = 6, 
+             color = "white", show.legend = FALSE) +
+  
+  # Circular layout
+  coord_polar(start = 0) +
+  scale_fill_manual(values = custom_colors) +
+  
+  # Styling adjustments
+  theme_void() +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold", color = "#333333"),
+    plot.margin = margin(5, 5, 5, 5)
+  ) +
+  
+  # Plot title
+  labs(title = "Model Metrics For Main Gastric Cancer Model") +
+  scale_y_continuous(limits = c(-10, 100)) + 
+  guides(fill = guide_legend(title = "Models"))
+
+```
+
+
+#GC Prediction on IBD
+
+```{r}
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.73, 0.76, 0.74, 0.76, 0.69, 0.41,  # XGBoost metrics
+            0.77, 0.76, 0.78, 0.76, 0.68, 0.09,  # Random Forest metrics
+            0.75, 0.76, 0.74, 0.76, 0.74, 0.34)  # LASSO metrics
+)
+# Adding IDs to separate sections for each model
+data <- data %>%
+  mutate(id = row_number() + rep(0:2 * 6, each = 6)) %>%  
+  mutate(group = fct_relevel(group, "XGBoost", "Random Forest", "LASSO"))  
+
+# Define custom colors for each model
+custom_colors <- c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")
+
+# Plot
+ggplot(data, aes(x = factor(id), y = value * 100, fill = group)) +
+  geom_bar(aes(y = 100), stat = "identity", width = 1, color = "white", alpha = 0.5) +
+  geom_bar(stat = "identity", width = 1, color = "white", size = 1.1) +
+  geom_label(aes(label = round(value * 100, 2), fill = group), size = 6, 
+             color = "white", show.legend = FALSE) +
+  
+  # Circular layout
+  coord_polar(start = 0) +
+  scale_fill_manual(values = custom_colors) +
+  
+  # Styling adjustments
+  theme_void() +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold", color = "#333333"),
+    plot.margin = margin(5, 5, 5, 5)
+  ) +
+  
+  # Plot title
+  labs(title = "Model Metrics For Gastric Cancer Features on IBD") 
+  scale_y_continuous(limits = c(-10, 100)) + 
+  guides(fill = guide_legend(title = "Models"))
+```
+
+
+#GC Predictions on CRC
+
+```{r}
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.59, 0.59, 0.60, 0.59, 0.59, 0.08,  # XGBoost metrics
+            0.63, 0.61, 0.66, 0.61, 0.61, 0.93,  # Random Forest metrics
+            0.58, 0.56, 0.56, 0.56, 0.53, 0.79)  # LASSO metrics
+)
+# Adding IDs to separate sections for each model
+data <- data %>%
+  mutate(id = row_number() + rep(0:2 * 6, each = 6)) %>%  
+  mutate(group = fct_relevel(group, "XGBoost", "Random Forest", "LASSO"))  
+
+# Define custom colors for each model
+custom_colors <- c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")
+
+# Plot
+ggplot(data, aes(x = factor(id), y = value * 100, fill = group)) +
+  geom_bar(aes(y = 100), stat = "identity", width = 1, color = "white", alpha = 0.5) +
+  geom_bar(stat = "identity", width = 1, color = "white", size = 1.1) +
+  geom_label(aes(label = round(value * 100, 2), fill = group), size = 6, 
+             color = "white", show.legend = FALSE) +
+  
+  # Circular layout
+  coord_polar(start = 0) +
+  scale_fill_manual(values = custom_colors) +
+  
+  # Styling adjustments
+  theme_void() +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 19),
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold", color = "#333333"),
+    plot.margin = margin(5, 5, 5, 5)
+  ) +
+  
+  # Plot title
+  labs(title = "Model Metrics For Gastric Cancer Features for CC") +
+  scale_y_continuous(limits = c(-10, 100)) + 
+  
+  # Guide for legend with a clearer layout
+  guides(fill = guide_legend(title = "Models"))
+```
+
+#Colon Cancer Model
+
+```{r}
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.72, 0.67, 0.67, 0.67, 0.67, 0.64,  # XGBoost metrics
+            0.75, 0.66, 0.65, 0.66, 0.66, 0.72,  # Random Forest metrics
+            0.70, 0.67, 0.67, 0.67, 0.54, 0.69)  # LASSO metrics
+)
+# Adding IDs to separate sections for each model
+data <- data %>%
+  mutate(id = row_number() + rep(0:2 * 6, each = 6)) %>%  
+  mutate(group = fct_relevel(group, "XGBoost", "Random Forest", "LASSO"))  
+
+# Define custom colors for each model
+custom_colors <- c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")
+
+# Plot
+ggplot(data, aes(x = factor(id), y = value * 100, fill = group)) +
+  geom_bar(aes(y = 100), stat = "identity", width = 1, color = "white", alpha = 0.5) +
+  geom_bar(stat = "identity", width = 1, color = "white", size = 1.1) +
+  geom_label(aes(label = round(value * 100, 2), fill = group), size = 6, 
+             color = "white", show.legend = FALSE) +
+  
+  # Circular layout
+  coord_polar(start = 0) +
+  scale_fill_manual(values = custom_colors) +
+  
+  # Styling adjustments
+  theme_void() +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold", color = "#333333"),
+    plot.margin = margin(5, 5, 5, 5)
+  ) +
+  
+  # Plot title
+  labs(title = "Model Metrics For Colon Cancer Main Model") +
+  scale_y_continuous(limits = c(-10, 100)) + 
+  guides(fill = guide_legend(title = "Models"))
+```
+
+
+#CRC predictions on GC
+
+```{r}
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.85, 0.69, 0.73, 0.69, 0.68, 0.86,  # XGBoost metrics
+            0.86, 0.76, 0.79, 0.76, 0.76, 0.88,  # Random Forest metrics
+            0.70, 0.69, 0.71, 0.69, 0.69, 0.62)  # LASSO metrics
+)
+# Adding IDs to separate sections for each model
+data <- data %>%
+  mutate(id = row_number() + rep(0:2 * 6, each = 6)) %>%  # Offset each model's group by 6 IDs
+  mutate(group = fct_relevel(group, "XGBoost", "Random Forest", "LASSO"))  # Reorder levels
+
+# Define custom colors for each model
+custom_colors <- c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")
+
+# Plot
+ggplot(data, aes(x = factor(id), y = value * 100, fill = group)) +
+  geom_bar(aes(y = 100), stat = "identity", width = 1, color = "white", alpha = 0.5) +
+  geom_bar(stat = "identity", width = 1, color = "white", size = 1.1) +
+  geom_label(aes(label = round(value * 100, 2), fill = group), size = 6, 
+             color = "white", show.legend = FALSE) +
+  
+  # Circular layout
+  coord_polar(start = 0) +
+  scale_fill_manual(values = custom_colors) +
+  
+  # Styling adjustments
+  theme_void() +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold", color = "#333333"),
+    plot.margin = margin(5, 5, 5, 5)
+  ) +
+  
+  # Plot title
+  labs(title = "Model Metrics For Colon Cancer features in GC") +
+  scale_y_continuous(limits = c(-10, 100)) + 
+  guides(fill = guide_legend(title = "Models"))
+```
+
+
+#CRC predictions on IBD
+
+```{r}
+
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.58, 0.75, 0.68, 0.75, 0.64, 0.61,  # XGBoost metrics
+            0.52, 0.75, 0.81, 0.75, 0.64, 0.93,  # Random Forest metrics
+            0.65, 0.75, 0.81, 0.75, 0.64, 0.86)  # LASSO metrics
+)
+# Adding IDs to separate sections for each model
+data <- data %>%
+  mutate(id = row_number() + rep(0:2 * 6, each = 6)) %>%  # Offset each model's group by 6 IDs
+  mutate(group = fct_relevel(group, "XGBoost", "Random Forest", "LASSO"))  # Reorder levels
+
+# Define custom colors for each model
+custom_colors <- c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")
+
+# Plot
+ggplot(data, aes(x = factor(id), y = value * 100, fill = group)) +
+  geom_bar(aes(y = 100), stat = "identity", width = 1, color = "white", alpha = 0.5) +
+  geom_bar(stat = "identity", width = 1, color = "white", size = 1.1) +
+  geom_label(aes(label = round(value * 100, 2), fill = group), size = 6, 
+             color = "white", show.legend = FALSE) +
+  
+  # Circular layout
+  coord_polar(start = 0) +
+  scale_fill_manual(values = custom_colors) +
+  
+  # Styling adjustments
+  theme_void() +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold", color = "#333333"),
+    plot.margin = margin(5, 5, 5, 5)
+  ) +
+  
+  # Plot title
+  labs(title = "Model Metrics For Colon Cancer features in IBD") +
+  scale_y_continuous(limits = c(-10, 100)) + 
+  guides(fill = guide_legend(title = "Models"))
+```
+
+#IBD model
+```{r}
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.87, 0.82, 0.82, 0.82, 0.82, 0.64,  # XGBoost metrics
+            0.93, 0.84, 0.83, 0.84, 0.83, 0.64,  # Random Forest metrics
+            0.84, 0.78, 0.80, 0.78, 0.78, 0.64)  # LASSO metrics
+)
+
+# Adding IDs to separate sections for each model
+data <- data %>%
+  mutate(id = row_number() + rep(0:2 * 6, each = 6)) %>%  # Offset each model's group by 6 IDs
+  mutate(group = fct_relevel(group, "XGBoost", "Random Forest", "LASSO"))  # Reorder levels
+
+# Define custom colors for each model
+custom_colors <- c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")
+
+# Plot
+ggplot(data, aes(x = factor(id), y = value * 100, fill = group)) +
+  geom_bar(aes(y = 100), stat = "identity", width = 1, color = "white", alpha = 0.5) +
+  geom_bar(stat = "identity", width = 1, color = "white", size = 1.1) +
+  geom_label(aes(label = round(value * 100, 2), fill = group), size = 6, 
+             color = "white", show.legend = FALSE) +
+  
+  # Circular layout
+  coord_polar(start = 0) +
+  scale_fill_manual(values = custom_colors) +
+  
+  # Styling adjustments
+  theme_void() +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold", color = "#333333"),
+    plot.margin = margin(5, 5, 5, 5)
+  ) +
+  
+  # Plot title
+  labs(title = "Model Metrics For IBD Main Model") +
+  scale_y_continuous(limits = c(-10, 100)) + 
+  guides(fill = guide_legend(title = "Models"))
+```
+
+#IBD predictions on GC
+
+```{r}
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.50, 0.56, 0.75, 0.56, 0.56, 0,  # XGBoost metrics
+            0.66, 0.56, 0.75, 0.56, 0.56, 0,  # Random Forest metrics
+            0.64, 0.56, 0.56, 0.56, 0.56, 0.05)  # LASSO metrics
+)
+# Adding IDs to separate sections for each model
+data <- data %>%
+  mutate(id = row_number() + rep(0:2 * 6, each = 6)) %>%  # Offset each model's group by 6 IDs
+  mutate(group = fct_relevel(group, "XGBoost", "Random Forest", "LASSO"))  # Reorder levels
+
+# Define custom colors for each model
+custom_colors <- c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")
+
+# Plot
+ggplot(data, aes(x = factor(id), y = value * 100, fill = group)) +
+  geom_bar(aes(y = 100), stat = "identity", width = 1, color = "white", alpha = 0.5) +
+  geom_bar(stat = "identity", width = 1, color = "white", size = 1.1) +
+  geom_label(aes(label = round(value * 100, 2), fill = group), size = 5.5, 
+             color = "white", show.legend = FALSE) +
+  
+  # Circular layout
+  coord_polar(start = 0) +
+  scale_fill_manual(values = custom_colors) +
+  
+  # Styling adjustments
+  theme_void() +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold", color = "#333333"),
+    plot.margin = margin(5, 5, 5, 5)
+  ) +
+  
+  # Plot title
+  labs(title = "Model Metrics For IBD features for GC") +
+  scale_y_continuous(limits = c(-10, 100)) + 
+  guides(fill = guide_legend(title = "Models"))
+```
+
+#IBD predictions on CRC
+
+```{r}
+
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.53, 0.54, 0.75, 0.54, 0.54, 1,  # XGBoost metrics
+            0.53, 0.54, 0.75, 0.54, 0.54, 1,  # Random Forest metrics
+            0.57, 0.57, 0.57, 0.57, 0.57, 0.01)  # LASSO metrics
+)
+
+# Adding IDs to separate sections for each model
+data <- data %>%
+  mutate(id = row_number() + rep(0:2 * 6, each = 6)) %>%  # Offset each model's group by 6 IDs
+  mutate(group = fct_relevel(group, "XGBoost", "Random Forest", "LASSO"))  # Reorder levels
+
+# Define custom colors for each model
+custom_colors <- c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")
+
+# Plot
+ggplot(data, aes(x = factor(id), y = value * 100, fill = group)) +
+  geom_bar(aes(y = 100), stat = "identity", width = 1, color = "white", alpha = 0.5) +
+  geom_bar(stat = "identity", width = 1, color = "white", size = 1.1) +
+  geom_label(aes(label = round(value * 100, 2), fill = group), size = 5.7, 
+             color = "white", show.legend = FALSE) +
+  
+  # Circular layout
+  coord_polar(start = 0) +
+  scale_fill_manual(values = custom_colors) +
+  
+  # Styling adjustments
+  theme_void() +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold", color = "#333333"),
+    plot.margin = margin(5, 5, 5, 5)
+  ) +
+  
+  # Plot title
+  labs(title = "Model Metrics For IBD features for CC") +
+  scale_y_continuous(limits = c(-10, 100)) + 
+  guides(fill = guide_legend(title = "Models"))
+```
+
+
+
+#GASTRIC CANCER VALIDATION BAR GRAPH 
+
+#Microbiome
+
+```{r, fig.width=6, fig.height=4}
+
+# Create the data frame
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.58, 0.80, 0.84, 0.80, 0.71, 0,  # XGBoost metrics
+            0.88, 0.90, 0.90, 0.90, 0.90, 0,  # Random Forest metrics
+            0.50, 0.80, 0.84, 0.80, 0.71, 1)  # LASSO metrics
+)
+# Reorder the 'name' column to ensure the desired order of metrics
+data$name <- factor(data$name, levels = c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"))
+data$group <- factor(data$group, levels = c("XGBoost", "Random Forest", "LASSO"))
+
+# Plot
+ggplot(data, aes(x = name, y = value, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "red") +
+  labs(title = "",
+       fill = "Model") +
+  scale_fill_manual(values = c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust = 0.5, size = 18, colour= 'black'),
+    axis.text.y = element_text(size = 18, colour= 'black'),
+    legend.title = element_text(size = 18, face = "bold"),   
+    legend.text = element_text(size = 18),
+    legend.position = "bottom",  
+    legend.direction = "horizontal"
+  )
+
+```
+
+
+
+#Metabolite
+
+```{r, fig.width=6, fig.height=4}
+
+# Create the data frame
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.50, 0.95, 0.95, 0.95, 0.92, 1,  # XGBoost metrics
+            0.50, 0.95, 0.95, 0.95, 0.92, 1,  # Random Forest metrics
+            0.50, 0.95, 0.95, 0.95, 0.92, 1)  # LASSO metrics
+)
+
+# Reorder the 'name' column to ensure the desired order of metrics
+data$name <- factor(data$name, levels = c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"))
+data$group <- factor(data$group, levels = c("XGBoost", "Random Forest", "LASSO"))
+
+# Plot
+ggplot(data, aes(x = name, y = value, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "red") +
+  labs(title = "",
+       fill = "Model") +
+  scale_fill_manual(values = c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust = 0.5, size = 18, colour= 'black'),
+    axis.text.y = element_text(size = 18, colour= 'black'),
+    legend.title = element_text(size = 18, face = "bold"), 
+    legend.text = element_text(size = 18)
+  )
+
+```
+
+
+
+#Colon Cancer
+
+#Microbiome
+
+```{r}
+
+# Create the data frame
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.51, 0.74, 0.81, 0.74, 0.74, 0,  # XGBoost metrics
+            0.50, 0.74, 0.81, 0.74, 0.74, 0,  # Random Forest metrics
+            0.50, 0.74, 0.74, 0.74, 0.74, 0)  # LASSO metrics
+  
+)
+
+# Reorder the 'name' column to ensure the desired order of metrics
+data$name <- factor(data$name, levels = c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"))
+data$group <- factor(data$group, levels = c("XGBoost", "Random Forest", "LASSO"))
+
+# Plot
+ggplot(data, aes(x = name, y = value, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "red") +
+  labs(title = "",
+       fill = "Model") +
+  scale_fill_manual(values = c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")) + 
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust = 0.5, size = 18, colour= 'black'),
+    axis.text.y = element_text(size = 18, colour= 'black'),
+    legend.title = element_text(size = 18, face = "bold"),   
+    legend.text = element_text(size = 18),
+    legend.position = "bottom",  
+    legend.direction = "horizontal"
+  )
+```
+
+
+#Metabolite
+
+```{r, fig.width=6, fig.height=4}
+
+# Create the data frame
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.46, 0.74, 0.81, 0.74, 0.74, 0.98,  # XGBoost metrics
+            0.50, 0.74, 0.81, 0.74, 0.63, 0.75,  # Random Forest metrics
+            0.53, 0.74, 0.69, 0.74, 0.68, 0.92)  # LASSO metrics
+)
+
+# Reorder the 'name' column to ensure the desired order of metrics
+data$name <- factor(data$name, levels = c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"))
+data$group <- factor(data$group, levels = c("XGBoost", "Random Forest", "LASSO"))
+
+# Plot
+ggplot(data, aes(x = name, y = value, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "red") +
+  labs(title = "",
+       fill = "Model") +
+  scale_fill_manual(values = c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust = 0.5, size = 18, colour= 'black'),
+    axis.text.y = element_text(size = 18, colour= 'black'),
+    legend.title = element_text(size = 18, face = "bold"),   
+    legend.text = element_text(size = 18),
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+```
+
+#IBD
+
+#Microbiome
+
+```{r}
+# Create the data frame
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.59, 0.75, 0.76, 0.75, 0.75, 0.09,  # XGBoost metrics
+            0.60, 0.74, 0.70, 0.74, 0.74, 0.18,  # Random Forest metrics
+            0.56, 0.73, 0.80, 0.73, 0.73, 0.02)  # LASSO metrics
+)
+
+# Reorder the 'name' column to ensure the desired order of metrics
+data$name <- factor(data$name, levels = c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"))
+data$group <- factor(data$group, levels = c("XGBoost", "Random Forest", "LASSO"))
+
+# Plot
+ggplot(data, aes(x = name, y = value, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "red") +
+  labs(title = "",
+       fill = "Model") +
+  scale_fill_manual(values = c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust = 0.5, size = 18, colour= 'black'),
+    axis.text.y = element_text(size = 18, colour= 'black'),
+    legend.title = element_text(size = 18, face = "bold"),   
+    legend.text = element_text(size = 18),
+    legend.position = "bottom", 
+    legend.direction = "horizontal"
+  )
+
+```
+
+
+#Metabolite
+
+```{r, fig.width=6, fig.height=4}
+
+# Create the data frame
+data <- data.frame(
+  group = c(rep("XGBoost", 6), rep("Random Forest", 6), rep("LASSO", 6)),
+  name = rep(c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"), 3),
+  value = c(0.47, 0.74, 0.81, 0.74, 0.74, 0.11,  # XGBoost metrics
+            0.47, 0.74, 0.81, 0.74, 0.63, 0.97,  # Random Forest metrics
+            0.50, 0.75, 0.81, 0.75, 0.64, 0.14)  # LASSO metrics
+)
+
+# Reorder the 'name' column to ensure the desired order of metrics
+data$name <- factor(data$name, levels = c("ROC AUC", "Accuracy", "Precision", "Recall", "F1", "Specificity"))
+data$group <- factor(data$group, levels = c("XGBoost", "Random Forest", "LASSO"))
+
+# Plot
+ggplot(data, aes(x = name, y = value, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "red") +
+  labs(title = "",
+       fill = "Model") +
+  scale_fill_manual(values = c("XGBoost" = "#1A78CF", "Random Forest" = "#00A651", "LASSO" = "#D70232")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust = 0.5, size = 18, colour= 'black'),
+    axis.text.y = element_text(size = 18, colour= 'black'),
+    legend.title = element_text(size = 18, face = "bold"),   
+    legend.text = element_text(size = 18),
+    legend.position = "bottom",  
+    legend.direction = "horizontal"
+  )
+```
+
+
+
+
+#Top Features
+#GC microbiome
+
+```{r}
+
+# Create the data frame
+data <- data.frame(
+  name = factor(c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30"), 
+                levels = c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30")),  
+  value = c(0.74, 0.9, 0.97, 0.96, 0.96, 0.94)   
+)
+
+# Plot
+ggplot(data, aes(y = name, x = value, fill = "Random Forest")) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "red") +
+  labs(
+    title = "",
+    x = "Performance Metric",  
+    y = "Top Features",        
+    fill = "Model"
+  ) +
+  scale_fill_manual(values = c("Random Forest" = "#00A651")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 18, colour = "black"),
+    axis.text.y = element_text(size = 18, colour = "black"),
+    axis.title.x = element_text(size = 18, face = "bold"),
+    axis.title.y = element_text(size = 18, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text = element_text(size = 18),
+    legend.position = "bottom",  # Position legend at the bottom
+    legend.direction = "horizontal"
+  )
+```
+
+#GC metabolome
+
+```{r}
+
+# Create the data frame
+data <- data.frame(
+  name = factor(c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30"), 
+                levels = c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30")),  
+  value = c(0.8, 0.89, 0.86, 0.85, 0.83, 0.98)  # 
+)
+
+# Plot
+ggplot(data, aes(y = name, x = value, fill = "LASSO")) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "black") +
+  labs(
+    title = "",
+    x = "Performance Metric",  
+    y = "Top Features",        
+    fill = "Model"
+  ) +
+  scale_fill_manual(values = c("LASSO" = "#D70232")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 18, colour = "black"),
+    axis.text.y = element_text(size = 18, colour = "black"),
+    axis.title.x = element_text(size = 18, face = "bold"),
+    axis.title.y = element_text(size = 18, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text = element_text(size = 18),
+    legend.position = "bottom",  
+    legend.direction = "horizontal"
+  )
+
+```
+
+
+#CRC Microbes 
+
+```{r}
+
+# Create the data frame
+data <- data.frame(
+  name = factor(c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30"), 
+                levels = c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30")),
+  value = c(0.53, 0.51, 0.54, 0.53, 0.53, 0.51)  # 
+)
+
+# Plot
+ggplot(data, aes(y = name, x = value, fill = "Random Forest")) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "black") +
+  labs(
+    title = "",
+    x = "Performance Metric",  # Set x-axis label
+    y = "Top Features",        # Set y-axis label
+    fill = "Model"
+  ) +
+  scale_fill_manual(values = c("Random Forest" = "#00A651")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 18, colour = "black"),
+    axis.text.y = element_text(size = 18, colour = "black"),
+    axis.title.x = element_text(size = 18, face = "bold"),
+    axis.title.y = element_text(size = 18, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text = element_text(size = 18),
+    legend.position = "bottom",  
+    legend.direction = "horizontal"
+  )
+
+```
+
+
+
+#CRC Metabolome
+
+```{r}
+# Create the data frame
+data <- data.frame(
+  name = factor(c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30"), 
+                levels = c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30")),  
+  value = c(0.55, 0.59, 0.60, 0.61, 0.61, 0.61)  # 
+)
+
+# Plot
+ggplot(data, aes(y = name, x = value, fill = "LASSO")) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "black") +
+  labs(
+    title = "",
+    x = "Performance Metric", 
+    y = "Top Features",        
+    fill = "Model"
+  ) +
+  scale_fill_manual(values = c("LASSO" = "#D70232")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 18, colour = "black"),
+    axis.text.y = element_text(size = 18, colour = "black"),
+    axis.title.x = element_text(size = 18, face = "bold"),
+    axis.title.y = element_text(size = 18, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text = element_text(size = 18),
+    legend.position = "bottom", 
+    legend.direction = "horizontal"
+  )
+```
+
+
+#IBD microbiome
+
+```{r}
+
+# Create the data frame
+data <- data.frame(
+  name = factor(c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30"), 
+                levels = c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30")),  
+  value = c(0.88, 0.87, 0.89, 0.85, 0.84, 0.85)  # 
+)
+
+# Plot
+ggplot(data, aes(y = name, x = value, fill = "Random Forest")) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "black") +
+  labs(
+    title = "",
+    x = "Performance Metric",  
+    y = "Top Features",      
+    fill = "Model"
+  ) +
+  scale_fill_manual(values = c("Random Forest" = "#00A651")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 18, colour = "black"),
+    axis.text.y = element_text(size = 18, colour = "black"),
+    axis.title.x = element_text(size = 18, face = "bold"),
+    axis.title.y = element_text(size = 18, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text = element_text(size = 18),
+    legend.position = "bottom",  
+    legend.direction = "horizontal"
+  )
+
+```
+
+#IBD metabolome
+
+```{r}
+
+# Create the data frame
+data <- data.frame(
+  name = factor(c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30"), 
+                levels = c("Top 5", "Top 10", "Top 15", "Top 20", "Top 25", "Top 30")),  
+  value = c(0.84, 0.87, 0.87, 0.88, 0.87, 0.88)  # 
+)
+
+# Plot
+ggplot(data, aes(y = name, x = value, fill = "Random Forest")) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "black") +
+  labs(
+    title = "",
+    x = "Performance Metric",
+    y = "Top Features",        
+    fill = "Model"
+  ) +
+  scale_fill_manual(values = c("Random Forest" = "#00A651")) +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 18, colour = "black"),
+    axis.text.y = element_text(size = 18, colour = "black"),
+    axis.title.x = element_text(size = 18, face = "bold"),
+    axis.title.y = element_text(size = 18, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text = element_text(size = 18),
+    legend.position = "bottom", 
+    legend.direction = "horizontal"
+  )
+
+```
+
+
+
+

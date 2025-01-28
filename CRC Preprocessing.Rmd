@@ -1,0 +1,519 @@
+---
+title: "Colon Cancer Preprocessing"
+author: "Daryll Susan Philip"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/DaryllPhilip/Desktop/THESIS /Colon Cancer/YACHIDA_CRC_2019")
+```
+
+```{r}
+getwd()
+```
+
+
+#Load required packages
+```{r}
+library(tidyverse)
+library(dplyr)
+library(vegan)
+library(tidyr)
+library(naniar)
+library(ape)
+library(ggplot2)
+library(FactoMineR)
+library(factoextra)
+library(stats)
+```
+
+
+#Load the datasets
+```{r}
+#microbiome
+gene_cc = read.csv("gene_sorted.csv", header = TRUE, stringsAsFactors = FALSE)
+gene_cc
+
+#metabolome
+mtb_cc = read.csv("mtb_sorted.csv", header = TRUE, stringsAsFactors = FALSE)
+mtb_cc
+```
+
+
+#Microbiome CRC
+
+```{r}
+
+# Count the number of patients in each group
+patient_counts <- gene_cc %>%
+  group_by(Study.Group) %>%
+  summarise(Count = n())
+print(patient_counts)
+
+
+colon_cancer_count <- sum(gene_cc$Study.Group == "Colon Cancer")
+healthy_count <- sum(gene_cc$Study.Group == "Healthy")
+
+cat("Number of Colon Cancer patients:", colon_cancer_count, "\n")
+cat("Number of Healthy patients:", healthy_count, "\n")
+
+```
+
+
+#Check for missing values
+```{r}
+
+missing_summary <- gene_cc %>%
+  summarise_all(~ sum(is.na(.))) %>%
+  gather(key = "Column", value = "MissingValues") %>%
+  mutate(MissingPercentage = (MissingValues / nrow(gene_cc)) * 100)
+missing_summary <- naniar::miss_var_summary(gene_cc)
+
+print(missing_summary)
+naniar::gg_miss_var(gene_cc)
+
+#there were no missing values
+```
+
+#Identify sparse features
+```{r}
+
+
+sparsity <- colSums(gene_cc == 0) / nrow(gene_cc) * 100
+bins <- cut(sparsity, breaks = seq(0, 110, by = 10), include.lowest = TRUE, right = FALSE, labels = FALSE)
+sparsity_counts <- table(bins)
+bin_labels <- c("0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%")
+total_features <- length(sparsity)
+surviving_features <- sum(bins == 1) 
+
+# Print the table
+print("Sparsity (%) | Number of Features")
+for (i in seq_along(bin_labels)) {
+  count <- ifelse(i %in% names(sparsity_counts), sparsity_counts[as.character(i)], 0)
+  cat(bin_labels[i], "|", count, "\n")
+}
+
+
+cat("\nTotal number of microbiome features:", total_features, "\n")
+cat("Number of surviving microbiome features (non-sparse):", surviving_features, "\n")
+```
+
+#Removing sparse features
+```{r}
+
+sparsity <- colSums(gene_cc == 0) / nrow(gene_cc) * 100
+gene_new <- gene_cc[, sparsity <= 70]
+
+cat("Original number of features:", ncol(gene_cc), "\n")
+cat("Number of features after filtering (<= 70% sparsity):", ncol(gene_new), "\n")
+
+```
+
+#Min-max scale the features
+```{r}
+min_max_scaling <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+gene_new <- gene_new %>%
+  mutate(across(where(is.numeric), min_max_scaling))
+gene_new
+```
+
+
+#PCoA to visualise the outliers
+
+```{r}
+
+gene_new <- gene_new[, !(names(gene_new) %in% c("Study.Group"))]
+bray_curtis_dist <- vegdist(gene_new, method = "bray")
+pcoa_results <- pcoa(bray_curtis_dist)
+coordinates <- pcoa_results$vectors[, 1:2]
+colnames(coordinates) <- c("Axis.1", "Axis.2")
+pcoa_df <- as.data.frame(coordinates)
+pcoa_df$Study.Group <- gene_new$Study.Group 
+pcoa_df$Study.Group <- as.factor(pcoa_df$Study.Group)
+
+
+pcoa_df <- pcoa_df %>%
+  mutate(OutlierStatus = ifelse(Outlier, "Outlier", "Non-Outlier"))
+print(table(pcoa_df$OutlierStatus))
+
+#Plot PCoA with outliers highlighted
+ggplot(pcoa_df, aes(x = Axis.1, y = Axis.2, color = Study.Group)) +
+  geom_point(aes(shape = OutlierStatus), size = 3) +  # Shape based on outlier status
+  stat_ellipse(aes(group = Study.Group, color = Study.Group), type = "t", level = 0.95) +
+  scale_color_manual(values = c("Colon Cancer" = "#D95F02", "Healthy" = "#1B9E77")) +
+  labs(title = "PCoA For Genera (Bray-Curtis) with Outliers",
+       x = paste("PCoA1 (", round(100 * pcoa_results$values$Relative_eig[1], 2), "%)", sep = ""),
+       y = paste("PCoA2 (", round(100 * pcoa_results$values$Relative_eig[2], 2), "%)", sep = ""),
+       color = "Group", shape = "Outlier Status") +
+  theme_minimal()
+
+```
+
+#Remove the outliers and replot the graph 
+```{r}
+
+non_outlier_indices <- which(pcoa_df$OutlierStatus == "Non-Outlier")
+cleaned_gene <- gene_new[non_outlier_indices, ]
+gen_cleaned <- cleaned_gene[, !(names(cleaned_gene) %in% c("Study.Group"))]
+bray_curtis_dist_cleaned <- vegdist(gen_cleaned, method = "bray")
+
+# Perform PCoA on the cleaned Bray-Curtis dissimilarity matrix
+pcoa_results_cleaned <- pcoa(bray_curtis_dist_cleaned)
+coordinates_cleaned <- pcoa_results_cleaned$vectors[, 1:2]
+colnames(coordinates_cleaned) <- c("Axis.1", "Axis.2")
+pcoa_df_cleaned <- as.data.frame(coordinates_cleaned)
+pcoa_df_cleaned$Study.Group <- cleaned_gene$Study.Group  # Ensure this column exists in 'cleaned_gene'
+pcoa_df_cleaned$Study.Group <- as.factor(pcoa_df_cleaned$Study.Group)
+
+#Plot PCoA for cleaned dataset with outliers removed
+ggplot(pcoa_df_cleaned, aes(x = Axis.1, y = Axis.2, color = Study.Group )) +
+  geom_point(size = 3) +  
+  stat_ellipse(aes(group = Study.Group, color = Study.Group), type = "t", level = 0.95) +
+  scale_color_manual(values = c("Colon Cancer" = "#D95F02", "Healthy" = "#1B9E77")) +
+  labs(title = "PCoA For Colon Cancer Genera (Bray-Curtis)",
+       x = paste("PCoA1 (", round(100 * pcoa_results_cleaned$values$Relative_eig[1], 2), "%)", sep = ""),
+       y = paste("PCoA2 (", round(100 * pcoa_results_cleaned$values$Relative_eig[2], 2), "%)", sep = ""),
+       color = "Group") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14), 
+    legend.title = element_text(size = 12)  
+  )
+
+```
+
+#Check for number of colon cancer and healthy patients for microbiome dataset
+```{r}
+gene_pcoa = cleaned_gene
+patient_counts <- gene_pcoa %>%
+  group_by(Study.Group) %>%
+  summarise(Count = n())
+print(patient_counts)
+
+
+cc_count <- sum(gene_pcoa$Study.Group == "Colon Cancer")
+healthy_count <- sum(gene_pcoa$Study.Group == "Healthy")
+
+cat("Number of Colon Cancer patients:", cc_count, "\n")
+cat("Number of Healthy patients:", healthy_count, "\n")
+
+# 267 samples from the microbiome dataset were considered for final analysis from the initial 277 samples
+```
+
+
+#Kruskal-Wallis test for Genera/Microbiome
+
+```{r}
+
+cc_ge <- gene_pcoa[, !colnames(gene_pcoa) %in% "Study.Group"]
+cc_ge$Study.Group <- as.factor(cc_gene$Study.Group)
+long_data <- cc_gene %>%
+  pivot_longer(cols = -Study.Group, names_to = "Compound", values_to = "Value")
+
+# Perform Kruskal-Wallis test for each compound
+compounds <- unique(long_data$Compound)
+kruskal_results <- lapply(compounds, function(compound) {
+  subset_data <- long_data %>% filter(Compound == compound)
+  
+  if (length(unique(subset_data$Study.Group)) < 2) {
+    warning(paste("Skipping compound", compound, "due to insufficient group data"))
+    return(NULL)
+  }
+  
+  result <- kruskal.test(Value ~ Study.Group, data = subset_data)
+  return(list(Compound = compound, Kruskal_Result = result))
+})
+
+results_gene <- data.frame(
+  Compound = character(),
+  H_Statistic = numeric(),
+  Degrees_Freedom = integer(),
+  P_Value = numeric(),
+  P_Value_FDR = numeric(),  
+  Reject_Null = logical(),  
+  stringsAsFactors = FALSE
+)
+
+for (res in kruskal_results) {
+  if (!is.null(res)) {
+    p_val <- res$Kruskal_Result$p.value
+    p_val_fdr <- p.adjust(p_val, method = "fdr") # FDR corrected p-value
+    reject_null <- p_val_fdr < 0.05
+    
+    results_gene <- rbind(results_gene, data.frame(
+      Compound = res$Compound,
+      H_Statistic = res$Kruskal_Result$statistic,
+      Degrees_Freedom = res$Kruskal_Result$parameter,
+      P_Value = p_val,
+      P_Value_FDR = p_val_fdr,
+      Reject_Null = reject_null
+    ))
+  }
+}
+
+num_rejected <- sum(results_gene$Reject_Null)
+num_accepted <- nrow(results_gene) - num_rejected
+
+cat("Number of null hypotheses rejected:", num_rejected, "\n")
+cat("Number of null hypotheses accepted:", num_accepted, "\n")
+```
+
+# Remove insignificant features
+```{r}
+non_significant_compounds <- results_gene$Compound[results_gene$Reject_Null == FALSE]
+gene_filtered <- gene_pcoa[, !names(gene_pcoa) %in% non_significant_compounds]
+print(gene_filtered)
+#the whole process left us with 206 microbes for machine learning analysis
+```
+
+
+#Metabolites(CC)
+
+```{r}
+
+# Count the number of patients in each group
+patient_counts <- mtb_cc %>%
+  group_by(Study.Group) %>%
+  summarise(Count = n())
+print(patient_counts)
+
+
+colon_cancer_count <- sum(mtb_cc$Study.Group == "Colon Cancer")
+healthy_count <- sum(mtb_cc$Study.Group == "Healthy")
+
+cat("Number of Colon Cancer patients:", colon_cancer_count, "\n")
+cat("Number of Healthy patients:", healthy_count, "\n")
+
+```
+
+
+#Check for missing values
+```{r}
+
+missing_summary <- mtb_cc %>%
+  summarise_all(~ sum(is.na(.))) %>%
+  gather(key = "Column", value = "MissingValues") %>%
+  mutate(MissingPercentage = (MissingValues / nrow(mtb_cc)) * 100)
+missing_summary <- naniar::miss_var_summary(mtb_cc)
+
+print(missing_summary)
+naniar::gg_miss_var(mtb_cc)
+
+#there were no missing values
+```
+
+#Identify sparse features
+```{r}
+
+
+sparsity <- colSums(mtb_cc == 0) / nrow(mtb_cc) * 100
+bins <- cut(sparsity, breaks = seq(0, 110, by = 10), include.lowest = TRUE, right = FALSE, labels = FALSE)
+sparsity_counts <- table(bins)
+bin_labels <- c("0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%")
+total_features <- length(sparsity)
+surviving_features <- sum(bins == 1) 
+
+# Print the table
+print("Sparsity (%) | Number of Features")
+for (i in seq_along(bin_labels)) {
+  count <- ifelse(i %in% names(sparsity_counts), sparsity_counts[as.character(i)], 0)
+  cat(bin_labels[i], "|", count, "\n")
+}
+
+
+cat("\nTotal number of microbiome features:", total_features, "\n")
+cat("Number of surviving microbiome features (non-sparse):", surviving_features, "\n")
+```
+
+#Removing sparse features
+```{r}
+
+sparsity <- colSums(mtb_cc == 0) / nrow(mtb_cc) * 100
+mtb_new <- mtb_cc[, sparsity <= 80]
+
+cat("Original number of features:", ncol(mtb_cc), "\n")
+cat("Number of features after filtering (<= 80% sparsity):", ncol(mtb_new), "\n")
+
+```
+
+#Min-max scale the features
+```{r}
+min_max_scaling <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+mtb_new <- mtb_new %>%
+  mutate(across(where(is.numeric), min_max_scaling))
+mtb_new
+```
+
+#PCA for metabolites
+
+```{r}
+
+
+mtbs <- mtb_new[, !(names(mtb_new) %in% c("Study.Group"))]
+
+
+mtbs <- mtbs[, apply(mtbs, 2, function(col) sd(col) != 0)]
+pca_result_mtb <- prcomp(mtbs, scale. = TRUE)
+fviz_eig(pca_result_mtb, addlabels = TRUE, ylim = c(0, 70))
+explained_variance <- summary(pca_result_mtb)$importance[2, ]
+pca_df <- as.data.frame(pca_result_mtb$x)
+
+
+
+#Calculate Mahalanobis distance
+mean_pca <- colMeans(pca_df[, 1:2])
+cov_pca <- cov(pca_df[, 1:2])
+mahalanobis_dist <- apply(pca_df[, 1:2], 1, function(x) mahalanobis(x, mean_pca, cov_pca))
+cutoff <- qchisq(0.95, df = 2)
+pca_df$Outlier <- mahalanobis_dist > cutoff
+
+
+pca_df <- pca_df %>%
+  mutate(OutlierStatus = ifelse(Outlier, "Outlier", "Non-Outlier"))
+
+#Plot PCA 
+ggplot(pca_df, aes(x = PC1, y = PC2, color = Study.Group, shape = OutlierStatus)) +
+  geom_point(size = 3) +
+  scale_shape_manual(values = c("Non-Outlier" = 16, "Outlier" = 4)) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(title = "PCA For Metabolites",
+       x = paste("PC1 (", round(100 * explained_variance[1], 2), "%)", sep = ""),
+       y = paste("PC2 (", round(100 * explained_variance[2], 2), "%)", sep = ""),
+       color = "Study.Group",
+       shape = "Outlier Status") +
+  theme_minimal()
+
+table(pca_df$OutlierStatus)
+
+```
+
+#Remove outliers and replot the graph
+
+```{r}
+
+pca_df_cleaned <- pca_df %>%
+  filter(OutlierStatus == "Non-Outlier")
+
+mtb_cc <- mtb_new %>%
+  filter(row.names(mtb_new) %in% row.names(pca_df_cleaned))
+
+#Plot PCA with outliers removed
+ggplot(pca_df_cleaned, aes(x = PC1, y = PC2, color = Study.Group)) +
+  geom_point(size = 3) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(title = "PCA For Colon Cancer Metabolites ",
+       x = paste("PC1 (", round(100 * explained_variance[1], 2), "%)", sep = ""),
+       y = paste("PC2 (", round(100 * explained_variance[2], 2), "%)", sep = ""),
+       color = "Group") +
+  theme_minimal() +
+theme(
+    plot.title = element_text(size = 16),  
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    legend.title = element_text(size = 12)  
+  )
+```
+
+#Check for number of Colon Cancer and Healthy patients for metabolome dataset
+```{r}
+mtb_pcoa = mtb_cc
+patient_counts <- mtb_pcoa %>%
+  group_by(Study.Group) %>%
+  summarise(Count = n())
+print(patient_counts)
+
+
+cc_count <- sum(mtb_pcoa$Study.Group == "Colon Cancer")
+healthy_count <- sum(mtb_pcoa$Study.Group == "Healthy")
+
+cat("Number of Colon Cancer patients:", cc_count, "\n")
+cat("Number of Healthy patients:", healthy_count, "\n")
+
+# 265 samples from the metabolome dataset were considered for final analysis from the previous 277 samples
+```
+
+#Kruskal-Wallis test for Metabolome
+
+```{r}
+
+cc_mtb <- mtb_pcoa[, !colnames(mtb_pcoa) %in% "Study.Group"]
+cc_mtb$Study.Group <- as.factor(cc_mtb$Study.Group)
+long_data <- cc_mtb %>%
+  pivot_longer(cols = -Study.Group, names_to = "Compound", values_to = "Value")
+
+# Perform Kruskal-Wallis test for each compound
+compounds <- unique(long_data$Compound)
+kruskal_results <- lapply(compounds, function(compound) {
+  subset_data <- long_data %>% filter(Compound == compound)
+  
+  if (length(unique(subset_data$Study.Group)) < 2) {
+    warning(paste("Skipping compound", compound, "due to insufficient group data"))
+    return(NULL)
+  }
+  
+  result <- kruskal.test(Value ~ Study.Group, data = subset_data)
+  return(list(Compound = compound, Kruskal_Result = result))
+})
+
+results_mtb <- data.frame(
+  Compound = character(),
+  H_Statistic = numeric(),
+  Degrees_Freedom = integer(),
+  P_Value = numeric(),
+  P_Value_FDR = numeric(),  
+  Reject_Null = logical(),  
+  stringsAsFactors = FALSE
+)
+
+for (res in kruskal_results) {
+  if (!is.null(res)) {
+    p_val <- res$Kruskal_Result$p.value
+    p_val_fdr <- p.adjust(p_val, method = "fdr") # FDR corrected p-value
+    reject_null <- p_val_fdr < 0.05
+    
+    results_mtb <- rbind(results_mtb, data.frame(
+      Compound = res$Compound,
+      H_Statistic = res$Kruskal_Result$statistic,
+      Degrees_Freedom = res$Kruskal_Result$parameter,
+      P_Value = p_val,
+      P_Value_FDR = p_val_fdr,
+      Reject_Null = reject_null
+    ))
+  }
+}
+
+num_rejected <- sum(results_mtb$Reject_Null)
+num_accepted <- nrow(results_mtb) - num_rejected
+
+cat("Number of null hypotheses rejected:", num_rejected, "\n")
+cat("Number of null hypotheses accepted:", num_accepted, "\n")
+```
+
+# Remove insignificant features
+```{r}
+non_significant_compounds <- results_mtb$Compound[results_mtb$Reject_Null == FALSE]
+mtb_filtered <- mtb_pcoa[, !names(mtb_pcoa) %in% non_significant_compounds]
+print(mtb_filtered)
+#the whole process left us with 103 microbes for machine learning analysis
+```
+
+#Save the datasets
+```{r}
+#microbiome
+write.csv(gene_filtered, "genera_processed_CC.tsv", row.names = FALSE, col.names = TRUE)
+#metabolome
+write.csv(mtb_filtered, "mtb_processed_CC.tsv",row.names = FALSE, col.names = TRUE)
+```
+
+
+
